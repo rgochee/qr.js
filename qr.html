@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>QR</title>
+</head>
+<body>
+<canvas id="QR" width="250" height="250" style="border:1px solid black">
+Your browser does not support the HTML5 canvas tag.
+</canvas>
+<script>
+
+// start external code - we want a deep array compare
+// attach the .compare method to Array's prototype to call it on any array
+Array.prototype.compare = function (array) {
+    // if the other array is a falsy value, return
+    if (!array)
+        return false;
+
+    // compare lengths - can save a lot of time
+    if (this.length != array.length)
+        return false;
+
+    for (var i = 0, l=this.length; i < l; i++) {
+        // Check if we have nested arrays
+        if (this[i] instanceof Array && array[i] instanceof Array) {
+            // recurse into the nested arrays
+            if (!this[i].compare(array[i]))
+                return false;
+        }
+        else if (this[i] != array[i]) {
+            // Warning - two different object instances will never be equal: {x:20} != {x:20}
+            return false;
+        }
+    }
+    return true;
+}
+// end external code
+
+function log2(val) {
+	var log = -1;
+	while (val > 0) {
+		log++;
+		val >>= 1;
+	}
+	return log;
+}
+function binModulo(dividend, divisor) {
+	var dividendLen = log2(dividend);
+	var divisorLen = log2(divisor);
+	if (dividendLen == 0 || divisorLen == 0)
+	{
+		return 0;
+	}
+	while (dividendLen >= divisorLen) {
+		dividend ^= divisor << (dividendLen-divisorLen);
+		dividendLen = log2(dividend);
+	}
+	return dividend
+}
+
+
+function GF256Value(val, isExp) {
+	if (!val)
+	{
+		val = 0;
+	}
+	if (isExp)
+	{
+		this.setExponent(val);
+	}
+	else
+	{
+		this.setInteger(val);
+	}
+}
+GF256Value.prototype.toString = function() {
+	return ''+this.val;
+}
+GF256Value.prototype.setExponent = function(exp) {
+	this.exp = exp % 255;
+	this.val = GF256.exp(this.exp);
+	return true;
+}
+GF256Value.prototype.setInteger = function(val) {
+	if (val >= 256)
+	{
+		return false;
+	}
+	if (val == 0)
+	{
+		this.val = 0;
+		this.exp = -1;
+		return true;
+	}
+	this.val = val;
+	this.exp = GF256.log(val);
+	return true;
+}
+GF256Value.prototype.getExponent = function(exp) {
+	return this.exp;
+}
+GF256Value.prototype.getInteger = function(val) {
+	return this.val;
+}
+GF256Value.prototype.add = function(other) {
+	if (other)
+	{
+		this.setInteger( this.val ^ other.val );
+	}
+}
+GF256Value.prototype.multiply = function(other) {
+	if (other)
+	{
+		if (other.val == 0 || this.val == 0)
+		{
+			this.setInteger( 0 );
+		}
+		else
+		{
+			this.setExponent( this.exp + other.exp );
+		}
+	}
+}
+GF256Value.prototype.invert = function() {
+	this.setExponent( 255 - this.exp );
+}
+
+GF256Value.add = function(a, b) {
+	result = Object.create(a);
+	result.add(b);
+	return result;
+}
+GF256Value.multiply = function(a, b) {
+	result = Object.create(a);
+	result.multiply(b);
+	return result;
+}
+GF256Value.invert = function(a) {
+	result = Object.create(a);
+	result.invert();
+	return result;
+}
+
+var GF256 = {
+	// constants
+	MODULO: 285,
+	
+	// given alpha^exp = integer
+	logTable: [],	// logTable[val] = exp
+	expTable: [],	// expTable[exp] = vap
+	
+	init: function() {
+		if (this.isInit)
+		{
+			return;
+		}
+		var exp = 0;
+		var val = 1;
+		for (var exp = 0; exp < 256; ++exp)
+		{
+			this.logTable[val] = exp;
+			this.expTable[exp] = val;
+			
+			val *= 2;
+			if (val >= 256)
+			{
+				val ^= this.MODULO;
+			}
+		}
+		this.logTable[1] = 0;
+		this.isInit = true;
+	},
+	
+	// helper functions
+	add: function(a, b) {
+		return a ^ b;
+	},
+	multiply: function(a, b) {
+		var expa = this.logTable[a];
+		var expb = this.logTable[b];
+		var expc = (expa + expb) % 255;
+		return this.expTable[expc];
+	},
+	inverse: function(val) {
+		var exp = this.expTable[val];
+		var invexp = 255-exp;
+		return this.logTable[invexp];
+	},
+	log: function(val) {
+		return this.logTable[val];
+	},
+	exp: function(exp) {
+		return this.expTable[exp];
+	}
+}
+
+function GF256Poly(value, term) {
+	this.poly = [new GF256Value(0)];
+	if (typeof(value) != 'undefined')
+	{
+		this.set(value, term);
+	}
+}
+GF256Poly.prototype.toString = function() {
+	temp = '';
+	if (!this.poly || this.poly.length == 0)
+	{
+		return '';
+	}
+	
+	if (this.poly.length == 1)
+	{
+		if (this.poly[0] == 0)
+		{
+			return '0';
+		}
+		
+		return ''+this.poly[0];
+	}
+	
+	var i = this.poly.length-1;
+	if (this.poly[i].getInteger() != 1)
+	{
+		temp += this.poly[i];
+	}
+	if (i == 1)
+	{
+		temp += 'x'
+	}
+	else if (i > 1)
+	{
+		temp += 'x^'+i;
+	}
+	
+	for (--i; i >= 0; --i)
+	{
+		if (this.poly[i].getInteger() != 0)
+		{
+			temp += ' + ';
+			if (this.poly[i].getInteger() != 1 || i == 0)
+			{
+				temp += this.poly[i];
+			}
+			
+			if (i == 1)
+			{
+				temp += 'x'
+			}
+			else if (i > 1)
+			{
+				temp += 'x^'+i;
+			}
+		}
+	}
+	return temp;
+}
+GF256Poly.prototype.set = function(value, term) {
+	if (typeof(term) == 'undefined')
+	{
+		for (var i = 0; i < value.length; ++i)
+		{
+			if (GF256Value.prototype.isPrototypeOf(value[i]))
+			{
+				this.poly[i] = value[i];
+			}
+			else
+			{
+				this.poly[i] = new GF256Value(value[i]);
+			}
+		}
+	}
+	else
+	{
+		if (GF256Value.prototype.isPrototypeOf(value))
+		{
+			this.poly[term] = value;
+		}
+		else
+		{
+			this.poly[term] = new GF256Value(value);
+		}
+		for (var i = term-1; i >= 0; --i)
+		{
+			if (typeof(this.poly[i]) == 'undefined')
+			{
+				this.poly[i] = new GF256Value(0);
+			}
+		}
+	}
+	this.clearLeadingTerms();
+}
+GF256Poly.prototype.getMaxTerm = function() {
+	return this.poly.length-1;
+}
+GF256Poly.prototype.getCoeff = function(term) {
+	if (term < this.poly.length)
+	{
+		return this.poly[term];
+	}
+	return 0;
+}
+GF256Poly.prototype.clearLeadingTerms = function() {
+	for (i = this.poly.length-1; i > 0; --i)
+	{
+		if (this.poly[i].getInteger() != 0)
+		{
+			this.poly.length = i+ 1
+			return;
+		}
+	}
+}
+GF256Poly.prototype.add = function(other) {
+	var i;
+	for (i = 0; i < this.poly.length; ++i)
+	{
+		this.poly[i].add(other.poly[i]);
+	}
+	for ( ; i < other.poly.length; ++i)
+	{
+		this.poly[i] = other.poly[i];
+	}
+	this.clearLeadingTerms();
+}
+GF256Poly.prototype.multiply = function(other) {
+	var temp = this.poly;
+	this.poly = [];
+	for (var i = 0; i < temp.length; ++i)
+	{
+		for (var j = 0; j < other.poly.length; ++j)
+		{
+			if (!this.poly[i+j])
+			{
+				this.poly[i+j] = new GF256Value();
+			}
+			this.poly[i+j].add(GF256Value.multiply(temp[i], other.poly[j]));
+		}
+	}
+}
+GF256Poly.prototype.modulo = function(other) {
+	while (this.poly.length >= other.poly.length)
+	{
+		b = new GF256Poly(this.poly[this.poly.length-1], this.poly.length - other.poly.length);
+		b.multiply(other);
+		this.add(b);
+	}
+}
+GF256Poly.prototype.invert = function() {
+	this.setExponent( 256 - this.exp );
+}
+
+var QRDataEncoder = {
+	// constants
+	TEXTMODE_ECI: 7,
+	TEXTMODE_NUM: 1,
+	TEXTMODE_ALNUM: 2,
+	TEXTMODE_BYTE: 4,
+	TEXTMODE_KANJI: 8,
+	TEXTMODE_FNC11: 5,
+	TEXTMODE_FNC12: 9,
+	TEXTMODE_EOM: 0,
+	
+	// local vars
+	text: "",
+	textMode: this.TEXTMODE_EOM, // I am lazy! no mixed modes, yo!
+	data: null,
+	dataLength: 0,
+	dataBits: null,
+	dataCodewords: null,
+	version: 2,
+	ECLevel: 0, // 0=L, 1=M, 2=Q, 3=H
+	
+	// functions
+	numDataBits : function(count) {
+		switch (this.textMode)
+		{
+			case this.TEXTMODE_NUM:
+				if (count >= 3) {
+					return 10;
+				}
+				if (count == 2) {
+					return 7;
+				}
+				if (count == 1) {
+					return 4;
+				}
+			break;
+			case this.TEXTMODE_ALNUM:
+				if (count >= 2) {
+					return 11;
+				}
+				if (count == 1) {
+					return 6;
+				}
+			break;
+			case this.TEXTMODE_BYTE:
+				return 8;
+			break;
+			case this.TEXTMODE_KANJI:
+				return 13;
+			break;
+			default:
+				return 0;
+		}
+		return 0;
+	},
+	
+	numCountBits : function() {
+		if (this.version <= 0 || this.version > 40) {
+			return 0;
+		}
+		if (this.textMode == this.TEXTMODE_BYTE) {
+			if (this.version <= 9) {
+				return 8;
+			} else {
+				return 16;
+			}
+		}
+		var count = 0;
+		switch (this.textMode)
+		{
+			case this.TEXTMODE_NUM:
+				count = 10;
+			break;
+			case this.TEXTMODE_ALNUM:
+				count = 9;
+			break;
+			case this.TEXTMODE_KANJI:
+				count = 8;
+			break;
+			default:
+				return 0;
+		}
+		if (this.version <= 9) {
+			return count;
+		}
+		if (this.version >= 27)
+		{
+			return count+4;
+		}
+		return count+2;
+	},
+	
+	numDataCodewords: function() {
+		var dataCodewords = [[]
+							,[19, 16, 13, 9] //1
+							,[34, 28, 22, 16] //2
+							,[55, 44, 34, 26] //3
+							,[80, 64, 48, 36] //4
+							,[108, 86, 62, 46] //5
+							,[136, 108, 76, 60] //6
+							,[156, 124, 88, 66] //7
+							,[194, 154, 110, 86] //8
+							,[232, 182, 132, 100] //9
+							,[274, 216, 154, 122] //10
+							,[324, 254, 180, 140] //11
+							,[370, 290, 206, 158] //12
+							,[428, 334, 244, 180] //13
+							,[461, 365, 261, 197] //14
+							,[523, 415, 295, 223] //15
+							,[589, 453, 325, 253] //16
+							,[647, 507, 367, 283] //17
+							,[721, 563, 397, 313] //18
+							,[795, 627, 445, 341] //19
+							,[861, 669, 485, 385] //20
+							,[932, 714, 512, 406] //21
+							,[1006, 782, 568, 442] //22
+							,[1094, 860, 614, 464] //23
+							,[1174, 914, 664, 514] //24
+							,[1276, 1000, 718, 536] //25
+							,[1370, 1062, 754, 596] //26
+							,[1468, 1128, 808, 628] //27
+							,[1531, 1193, 871, 661] //28
+							,[1631, 1267, 911, 701] //29
+							,[1735, 1373, 985, 745] //30
+							,[1843, 1455, 1033, 793] //31
+							,[1955, 1541, 1115, 845] //32
+							,[2071, 1631, 9171, 901] //33
+							,[2191, 1725, 1231, 961] //34
+							,[2306, 1812, 1286, 986] //35
+							,[2434, 1914, 1354, 1054] //36
+							,[2566, 1922, 1426, 1096] //37
+							,[2702, 2102, 1502, 1142] //38
+							,[2812, 2216, 1582, 1222] //39
+							,[2956, 2334, 1666, 1276] //40 
+							];
+		return dataCodewords[this.version][this.ECLevel]
+	},
+	
+	numErrorCodewords: function() {
+		var dataECCodewords = [[]
+							,[7, 10, 13, 17] //1
+							,[10, 16, 22, 28] //2
+							,[15, 26, 18, 22] //3
+							,[20, 18, 26, 16] //4
+							,[26, 24, 18, 22] //5
+							// todo:
+							,[136, 108, 76, 60] //6
+							,[156, 124, 88, 66] //7
+							,[194, 154, 110, 86] //8
+							,[232, 182, 132, 100] //9
+							,[274, 216, 154, 122] //10
+							,[324, 254, 180, 140] //11
+							,[370, 290, 206, 158] //12
+							,[428, 334, 244, 180] //13
+							,[461, 365, 261, 197] //14
+							,[523, 415, 295, 223] //15
+							,[589, 453, 325, 253] //16
+							,[647, 507, 367, 283] //17
+							,[721, 563, 397, 313] //18
+							,[795, 627, 445, 341] //19
+							,[861, 669, 485, 385] //20
+							,[932, 714, 512, 406] //21
+							,[1006, 782, 568, 442] //22
+							,[1094, 860, 614, 464] //23
+							,[1174, 914, 664, 514] //24
+							,[1276, 1000, 718, 536] //25
+							,[1370, 1062, 754, 596] //26
+							,[1468, 1128, 808, 628] //27
+							,[1531, 1193, 871, 661] //28
+							,[1631, 1267, 911, 701] //29
+							,[1735, 1373, 985, 745] //30
+							,[1843, 1455, 1033, 793] //31
+							,[1955, 1541, 1115, 845] //32
+							,[2071, 1631, 9171, 901] //33
+							,[2191, 1725, 1231, 961] //34
+							,[2306, 1812, 1286, 986] //35
+							,[2434, 1914, 1354, 1054] //36
+							,[2566, 1922, 1426, 1096] //37
+							,[2702, 2102, 1502, 1142] //38
+							,[2812, 2216, 1582, 1222] //39
+							,[2956, 2334, 1666, 1276] //40 
+							];
+		return dataECCodewords[this.version][this.ECLevel]
+	},
+	
+	numDataBlocks: function() {
+		var dataBlocks = [[]
+							,[1, 1, 1, 1] //1
+							,[1, 1, 1, 1] //2
+							,[1, 1, 2, 2] //3
+							,[1, 2, 2, 4] //4
+							// todo: multigroup
+							,[1, 2, 2, 2] //5
+							,[136, 108, 76, 60] //6
+							,[156, 124, 88, 66] //7
+							,[194, 154, 110, 86] //8
+							,[232, 182, 132, 100] //9
+							,[274, 216, 154, 122] //10
+							,[324, 254, 180, 140] //11
+							,[370, 290, 206, 158] //12
+							,[428, 334, 244, 180] //13
+							,[461, 365, 261, 197] //14
+							,[523, 415, 295, 223] //15
+							,[589, 453, 325, 253] //16
+							,[647, 507, 367, 283] //17
+							,[721, 563, 397, 313] //18
+							,[795, 627, 445, 341] //19
+							,[861, 669, 485, 385] //20
+							,[932, 714, 512, 406] //21
+							,[1006, 782, 568, 442] //22
+							,[1094, 860, 614, 464] //23
+							,[1174, 914, 664, 514] //24
+							,[1276, 1000, 718, 536] //25
+							,[1370, 1062, 754, 596] //26
+							,[1468, 1128, 808, 628] //27
+							,[1531, 1193, 871, 661] //28
+							,[1631, 1267, 911, 701] //29
+							,[1735, 1373, 985, 745] //30
+							,[1843, 1455, 1033, 793] //31
+							,[1955, 1541, 1115, 845] //32
+							,[2071, 1631, 9171, 901] //33
+							,[2191, 1725, 1231, 961] //34
+							,[2306, 1812, 1286, 986] //35
+							,[2434, 1914, 1354, 1054] //36
+							,[2566, 1922, 1426, 1096] //37
+							,[2702, 2102, 1502, 1142] //38
+							,[2812, 2216, 1582, 1222] //39
+							,[2956, 2334, 1666, 1276] //40 
+							];
+		return dataBlocks[this.version][this.ECLevel]
+	},
+	
+	zeroPadBitsBase2: function(num, length) {
+		// assumes that no input will be more than 16 bits
+		return ("0000000000000000" + num.toString(2)).slice(-length);
+	
+	},
+	
+	encodeChar: function(ch) { // note: make this take in textmode as param too?
+		if (this.textMode == this.TEXTMODE_NUM) {
+			if (ch >= "0" && ch <= "9") {
+				return ch.charCodeAt(0)-0x30;
+			}
+		}
+		if (this.textMode == this.TEXTMODE_ALNUM) {
+			var code = ch.charCodeAt(0);
+			if (ch >= "0" && ch <= "9") {
+				return code-0x30;
+			}
+			if (ch.toUpperCase() >= "A" && ch.toUpperCase() <= "Z") {
+				return code-0x41+10;
+			}
+			switch (ch) {
+				case " ":
+					return 36;
+				case "$":
+					return 37;
+				case "%":
+					return 38;
+				case "*":
+					return 39;
+				case "+":
+					return 40;
+				case "-":
+					return 41;
+				case ".":
+					return 42;
+				case "/":
+					return 43;
+				case ":":
+					return 44;
+			}
+		}
+		if (this.textMode == this.TEXTMODE_BYTE) {
+			return ch.charCodeAt(0);
+		}
+		return 0;
+	},
+	
+	/*
+	function to pad numbers formatted as binary strings? used with encode to make things a lot easier
+	var temp = myBaseTenNumber.toString(2);
+	("0000000000" + temp).slice(-11);
+	*/
+	
+	encodeData: function() {
+		// TODO: I think there's a problem if the text is supersuper tiny. check it
+		if (this.textMode == this.TEXTMODE_NUM) {
+			var i = 0;
+			this.data = [this.TEXTMODE_NUM, this.text.length];
+			while (i < this.text.length) {
+				var num = 0;
+				for (var j = 0; j < 3 && i+j < this.text.length; ++j)
+				{
+					num = 10*num + this.encodeChar(this.text[i+j]);
+				}
+				this.data.push(num);
+				i+=3;
+			}
+		} else if (this.textMode == this.TEXTMODE_ALNUM) {
+			var i = 0;
+			this.data = [this.TEXTMODE_ALNUM, this.text.length];
+			while (i < this.text.length-1) {
+				this.data.push(this.encodeChar(this.text[i])*45+this.encodeChar(this.text[i+1]));
+				i+=2;
+			}
+			if (i == this.text.length-1)
+			{
+				this.data.push(this.encodeChar(this.text[i]));
+				i++;
+			}
+		} else if (this.textMode == this.TEXTMODE_BYTE) {
+			this.data = [this.TEXTMODE_BYTE, this.text.length];
+			for (var i = 0; i < this.text.length; ++i) {
+				this.data.push(this.encodeChar(this.text[i]));
+			}
+		}
+	},
+	
+	encodeBits: function() {
+		if (this.data.length < 2) {
+			// input error
+			return;
+		}
+		this.dataBits = [];
+		// mode
+		this.dataBits[0] = this.zeroPadBitsBase2(this.data[0], 4);
+		this.dataLength = 4;
+		// data count
+		this.dataBits[1] = this.zeroPadBitsBase2(this.data[1], this.numCountBits());
+		this.dataLength += this.numCountBits();
+		// data
+		var charCount = this.data[1];
+		for (var i = 2; i < this.data.length; ++i) {
+			var numDataBits = this.numDataBits(charCount);
+			this.dataBits[i] = this.zeroPadBitsBase2(this.data[i], numDataBits);
+			this.dataLength += numDataBits;
+			if (this.textMode == this.TEXTMODE_NUM) {
+				charCount -= 3;
+			} else if (this.textMode == this.TEXTMODE_ALNUM) {
+				charCount -= 2;
+			} else {
+				charCount--;
+			}
+		}
+	},
+	
+	encode: function() {
+		this.encodeData();
+		this.encodeBits();
+	},
+	
+	finalizeDataBits: function() {
+		this.dataBits[this.dataBits.length] = "0000";
+	},
+	
+	convertBitsToCodewords: function() {
+		var allDataBits = this.dataBits.join("");
+		this.dataCodewords = [];
+		while (allDataBits.length > 8)
+		{
+			this.dataCodewords.push(parseInt(allDataBits.substring(0,8), 2));
+			allDataBits = allDataBits.substring(8);
+		}
+		if (allDataBits.length > 0)
+		{
+			allDataBits += "00000000";
+			this.dataCodewords.push(parseInt(allDataBits.substring(0,8), 2));
+		}
+		
+		var maxDataSize = this.numDataCodewords();
+		while (this.dataCodewords.length < maxDataSize)
+		{
+			this.dataCodewords.push(236);
+			this.dataCodewords.push(17);
+		}
+		
+		if (this.dataCodewords.length > maxDataSize)
+		{
+			this.dataCodewords.length = maxDataSize;
+		}
+	},
+	
+	createDataCodewords: function() {
+		this.encode();
+		this.finalizeDataBits();
+		this.convertBitsToCodewords();
+	},
+	
+	generateECGenerator: function() {
+		GF256.init();
+		this.ECGenerator = new GF256Poly([1, 1])
+		for (var i = 1; i < this.numErrorCodewords(); ++i)
+		{
+			this.ECGenerator.multiply(new GF256Poly([new GF256Value(GF256.exp(i)), 1]));
+			//alert(this.ECGenerator);
+		}
+	},
+	
+	generateMessagePolynomial: function() {
+		GF256.init();
+		this.messages = [];
+		//for (var i = 0; i < this.numDataBlocks(); ++i)
+		var i = 0; // TODO: handle bigger block sizes
+		{
+			this.messages[i] = new GF256Poly();
+			for (var j = 0; j < this.dataCodewords.length; ++j)
+			{
+				this.messages[i].set(new GF256Value(this.dataCodewords[this.dataCodewords.length-j-1]), j);
+			}
+		}
+	},
+	
+	generateErrorPolynomial: function() {
+		GF256.init();
+		this.errorMessage = this.messages[0];
+		this.errorMessage.multiply(new GF256Poly(1, this.ECGenerator.getMaxTerm()));
+		this.errorMessage.modulo(this.ECGenerator);
+		this.errorCodewords = [];
+
+		for (var i = 0; i <= this.errorMessage.getMaxTerm(); ++i)
+		{
+			this.errorCodewords[i] = this.errorMessage.getCoeff(this.errorMessage.getMaxTerm()-i);
+		}
+	},
+	
+	createErrorCodewords: function() {
+		this.generateECGenerator();
+		this.generateMessagePolynomial();
+		this.generateErrorPolynomial();
+	}
+}
+
+var QRCreator = {
+	// local vars
+	canvas: null,
+	size: 6,
+	
+	textData: null,
+	
+	grid: null,
+	blockPos: null,
+	blockDir: null,
+
+	version: {
+		number: 2,
+		getData: function() {
+			var BCHPoly18_6 = 0x1F25;
+			var verData = this.number << log2(BCHPoly18_6);
+			var BCHData = binModulo(verData, BCHPoly18_6);
+			return verData | BCHData;
+		}
+	},
+	
+	format: {
+		mask: 0,
+		error: 0,
+		getData: function() {
+			var BCHPoly15_5 = 0x537;
+			var infoData = ((this.getECBitSequence()<<3) | this.mask ) << log2(BCHPoly15_5);
+			var BCHData = binModulo(infoData, BCHPoly15_5);
+			var unmaskedData = infoData | BCHData;
+			var dataMask = 0x5412;
+			return unmaskedData ^ dataMask;
+		},
+		shouldMask: function(i,j) {
+			switch (this.mask) {
+				case 0:
+					return (i+j)%2==0;
+				case 1:
+					return i%2==0;
+				case 2:
+					return j%3==0;
+				case 3:
+					return (i+j)%3==0;
+				case 4:
+					return (Math.floor(i/2)+Math.floor(j/3))%2==0;
+				case 5:
+					return (i*j)%2+(i*j)%3==0;
+				case 6:
+					return ((i*j)%2+(i*j)%3)%2==0;
+				case 7:
+					return ((i+j)%2+(i*j)%3)%2==0;
+				default:
+					return 0;
+			}
+		},
+		getECBitSequence: function() {
+			switch (this.error) {
+				case 0:
+					return 1;
+				case 1:
+					return 0;
+				case 2:
+					return 3;
+				case 3:
+					return 2;
+				default:
+					return 0;
+			}
+		}
+	},
+	
+	myQRDataEncoder: QRDataEncoder,
+	
+	// Modify data
+	setText: function(text, textMode) {
+		this.myQRDataEncoder.text = text;
+		this.myQRDataEncoder.textMode = textMode;
+	},
+	
+	setVersion: function(ver) {
+		this.version.number = ver;
+		this.myQRDataEncoder.version = ver;
+	},
+	
+	setECLevel: function(EC) {
+		this.format.error = EC;
+		this.myQRDataEncoder.ECLevel = EC;
+	},
+
+	reset: function() {
+		this.setText('', 0);
+		this.setVersion(1);
+		this.setECLevel(0);
+		//this.canvas = null;
+		this.size = 6;
+		this.textData = null;
+		this.grid = null;
+		this.blockPos = null;
+		this.blockDir = null;
+	},
+	
+	// helper functions
+	getWidth: function() {
+		return 17+4*this.version.number;
+	},
+	
+	colorModule: function(x,y) {
+		//this.canvas.getContext("2d").fillRect((x+4)*this.size, (y+4)*this.size, this.size, this.size);
+		this.grid[x+4][y+4] = 1;
+	},
+	eraseModule: function(x,y) {
+		//this.canvas.getContext("2d").clearRect((x+4)*this.size, (y+4)*this.size, this.size, this.size);
+		this.grid[x+4][y+4] = 0;
+	},
+	drawModule: function(x,y, fill) {
+		if (fill) {
+			this.colorModule(x,y);
+		} else {
+			this.eraseModule(x,y);
+		}
+	},
+	
+	drawSquare: function(x, y, size, fill) {
+		for (var i = 0; i < size; ++i) {
+			for (var j = 0; j < size; ++j) {
+				if (fill) {
+					this.colorModule(x+i, y+j);
+				} else {
+					this.eraseModule(x+i, y+j);
+				}
+			}
+		}
+	},
+	
+	incrementBlockPos: function() {
+		function moveBlockPosLeft(parent) {
+			parent.blockPos[0]-=2;
+			parent.blockDir ^= 1;
+			if (parent.blockPos[0] == 5) {
+				// not right! get past the timing here
+				parent.blockPos[0]--;
+			}
+		}
+		if (this.blockDir == 0) {
+			// moving up?
+			if (this.blockPos[1] == 0) {
+				// don't go too far up, let's move left and change directions
+				moveBlockPosLeft(this);
+			} else {
+				this.blockPos[1]--;
+			}
+		} else {
+			// moving down!
+			if (this.blockPos[1] == this.getWidth()-1) {
+				// don't go too far down, let's move left and change directions
+				moveBlockPosLeft(this);
+			} else {
+				this.blockPos[1]++;
+			}
+		}
+	},
+	
+	// bigger entities
+	
+	// adding data
+	addBlock: function(block) {
+		if (this.blockPos[0] < 0) {
+			return;
+		}
+		for (var i = 7; i >= 0; --i) {
+			var value = (block >> i) & 1;
+			// try to put it in
+			if (this.grid[this.blockPos[0]+1+4][this.blockPos[1]+4] == null) {
+				this.grid[this.blockPos[0]+1+4][this.blockPos[1]+4] = value;
+				continue;
+			} else if (this.grid[this.blockPos[0]+4][this.blockPos[1]+4] == null) {
+				this.grid[this.blockPos[0]+4][this.blockPos[1]+4] = value;
+				continue;
+			}
+			
+			// no good... let's move to the next block pos
+			this.incrementBlockPos();
+			++i;
+		}
+	},
+	
+	addDataBlocks: function(dataCodewords) {
+		for (var i = 0; i < dataCodewords.length; ++i)
+		{
+			this.addBlock(dataCodewords[i]);
+		}
+	},
+	
+	// formatting/encoding/structure
+	
+	drawPosition: function(x,y) {
+		this.drawSquare(x-1,y-1,9,false);
+		this.drawSquare(x  ,y  ,7,true);
+		this.drawSquare(x+1,y+1,5,false);
+		this.drawSquare(x+2,y+2,3,true);
+	},
+	drawAlignment: function(x,y) {
+		this.drawSquare(x, y, 5, true);
+		this.drawSquare(x+1, y+1, 3, false);
+		this.colorModule(x+2,y+2);
+	},
+	drawAlternating: function(x, y, dir, len) {
+		for (var i = 0; i < len; ++i) {	
+			if (dir == "r" || dir == "h") {
+				if (i % 2 == 0) {
+					this.colorModule(x+i, y);
+				} else {
+					this.eraseModule(x+i, y);
+				}
+			}
+			else if (dir == "d" || dir == "v") {
+				if (i % 2 == 0) {
+					this.colorModule(x, y+i);
+				} else {
+					this.eraseModule(x, y+i);
+				}
+			}
+		}
+	},
+	
+	clearQuietZone: function() {
+		for (var i = 0; i < this.getWidth()/4+1; ++i)
+		{
+			this.drawSquare(-4, 4*(i-1), 4, false);
+			this.drawSquare(this.getWidth(), 4*(i-1), 4, false);
+			this.drawSquare(4*(i-1), -4, 4, false);
+			this.drawSquare(4*(i-1), this.getWidth(), 4, false);
+		}
+		this.drawSquare(this.getWidth(), this.getWidth(), 4, false);
+	},
+	
+	fillRemainder: function() {
+		for (var i = 0; i < this.grid.length; ++i) {
+			for (var j = 0; j < this.grid[i].length; ++j) {
+				if (this.grid[i][j] == null) {
+					this.canvas.getContext("2d").clearRect(i*this.size, j*this.size, this.size, this.size);
+				}
+			}
+		}
+	},
+	
+	// main functions
+	initGrid: function() {
+		this.grid = Array(this.getWidth()+8);
+		for (var i = 0; i < this.grid.length; ++i) {
+			this.grid[i] = Array(this.getWidth()+8);
+		}
+		this.blockPos = [this.getWidth()-2, this.getWidth()-1];
+		this.blockDir = 0;
+		
+		this.initStructure();
+	},
+	
+	initStructure: function() {
+		this.drawPatterns();
+		this.drawVersion();
+		this.drawFormat();
+	},
+	
+	displayGrid: function() {
+		for (var i = 0; i < this.grid.length; ++i) {
+			for (var j = 0; j < this.grid[i].length; ++j) {
+				if (this.grid[i][j]) {
+					this.canvas.getContext("2d").fillRect(i*this.size, j*this.size, this.size, this.size);
+				} else if (this.grid[i][j] == 0) {
+					this.canvas.getContext("2d").clearRect(i*this.size, j*this.size, this.size, this.size);
+				}
+			}
+		}
+	},
+	
+	maskGrid: function(mask) { // maybe move this into not a main function or subfunction because of the multiple masks
+		this.format.mask = (typeof mask == 'undefined' ?  this.format.mask : mask);
+		for (var i = 0; i < this.getWidth(); ++i) {
+			for (var j = 0; j < this.getWidth(); ++j) {
+				// this.format.mask=7;
+				this.grid[j+4][i+4] ^= this.format.shouldMask(i,j);
+			}
+		}
+		
+		// reinit this stuff because none of this should be masked.
+		this.initStructure();
+	},
+	
+	drawPatterns: function() {
+		// position detection patterns
+		this.drawPosition(0,0);
+		this.drawPosition(this.getWidth()-7,0);
+		this.drawPosition(0,this.getWidth()-7);
+		
+		// timing patterns
+		this.drawAlternating(8,6,"r",this.getWidth()-16);
+		this.drawAlternating(6,8,"d",this.getWidth()-16);
+		
+		// alignment patterns
+		if (this.version.number > 1 && this.version.number <= 6) {
+			this.drawAlignment(this.getWidth()-9,this.getWidth()-9);
+		}
+		
+		// quiet zone
+		this.clearQuietZone();
+	},
+	
+	drawFormat: function() {
+		//this.format.mask = 4;
+		//this.setVersion(1);
+		//this.setECLevel(0);
+		var format = this.format.getData();
+		var width = this.getWidth();
+		
+		// horizontal
+		this.drawModule(width-1, 8, format & 1<<0);
+		this.drawModule(width-2, 8, format & 1<<1);
+		this.drawModule(width-3, 8, format & 1<<2);
+		this.drawModule(width-4, 8, format & 1<<3);
+		this.drawModule(width-5, 8, format & 1<<4);
+		this.drawModule(width-6, 8, format & 1<<5);
+		this.drawModule(width-7, 8, format & 1<<6);
+		this.drawModule(width-8, 8, format & 1<<7);
+		this.drawModule(7, 8, format & 1<<8);
+		this.drawModule(5, 8, format & 1<<9);
+		this.drawModule(4, 8, format & 1<<10);
+		this.drawModule(3, 8, format & 1<<11);
+		this.drawModule(2, 8, format & 1<<12);
+		this.drawModule(1, 8, format & 1<<13);
+		this.drawModule(0, 8, format & 1<<14);
+		
+		// vertical
+		this.drawModule(8, 0, format & 1<<0);
+		this.drawModule(8, 1, format & 1<<1);
+		this.drawModule(8, 2, format & 1<<2);
+		this.drawModule(8, 3, format & 1<<3);
+		this.drawModule(8, 4, format & 1<<4);
+		this.drawModule(8, 5, format & 1<<5);
+		this.drawModule(8, 7, format & 1<<6);
+		this.drawModule(8, 8, format & 1<<7);
+		this.drawModule(8, width-7, format & 1<<8);
+		this.drawModule(8, width-6, format & 1<<9);
+		this.drawModule(8, width-5, format & 1<<10);
+		this.drawModule(8, width-4, format & 1<<11);
+		this.drawModule(8, width-3, format & 1<<12);
+		this.drawModule(8, width-2, format & 1<<13);
+		this.drawModule(8, width-1, format & 1<<14);
+		
+		this.colorModule(8, width-8);
+	},
+	
+	drawVersion: function() {
+		if (this.version.number < 7) {
+			return;
+		}
+		this.colorModule(9,15);
+		var ver = this.version.getData();
+		var width = this.getWidth();
+		for (var i = 0; i < 6; i++) {
+			for (var j = 0; j < 3; j++) {
+				this.drawModule(i, width-11+j, ver & 1 << (3*i+j));
+				this.drawModule(width-11+j, i, ver & 1 << (3*i+j));
+			}
+		}
+	},
+	
+	setAndFillBlocks: function() {
+		this.myQRDataEncoder.createDataCodewords();
+		this.myQRDataEncoder.createErrorCodewords();
+		this.addDataBlocks(this.myQRDataEncoder.dataCodewords);
+		this.addDataBlocks(this.myQRDataEncoder.errorCodewords);
+	},
+	
+	displayQR: function(drawFull) {
+		drawFull = (typeof drawFull == 'undefined' ?  true : drawFull);
+		
+		this.initStructure();
+		this.displayGrid();
+			
+		if (drawFull)
+			this.fillRemainder();
+	}
+}
+
+var QRUnitTests = 
+{
+	assert: function(varName, actualValue, expectedValue) {
+		if (typeof(actualValue) != typeof(expectedValue))
+		{
+			alert('Value of '+varName+' has type '+typeof(actualValue)+'('+actualValue+'), expected '+typeof(expectedValue)+' ('+expectedValue+')');
+		}
+		if (typeof(actualValue == 'object') &&
+			Object.prototype.toString.call(actualValue) != Object.prototype.toString.call(expectedValue))
+		{
+			alert('Value of '+varName+' has type '+Object.prototype.toString.call(actualValue)+'('+actualValue+'), expected '+Object.prototype.toString.call(expectedValue)+' ('+expectedValue+')');
+		}
+		
+		if (Object.prototype.toString.call(actualValue) == '[object Array]')
+		{
+			if (!actualValue.compare(expectedValue))
+			{
+				alert('Value of '+varName+' is '+actualValue+', expected '+expectedValue);
+			}
+		}
+		else if (actualValue != expectedValue)
+		{
+			alert('Value of '+varName+' is '+actualValue+', expected '+expectedValue);
+		}
+	},
+	
+	GF256Values: function() {
+		var a = new GF256Value(142);
+		this.assert('a', a.getInteger(), 142);
+		this.assert('exponent of a', a.getExponent(), 254);
+		
+		var b = new GF256Value(2);
+		this.assert('b', b.getInteger(), 2);
+		this.assert('exponent of b', b.getExponent(), 1);
+		
+		a.multiply(b);
+		this.assert('a', a.getInteger(), 1);
+		this.assert('exponent of a', a.getExponent(), 0);
+		
+		var a = new GF256Value(2, 1);
+		this.assert('a', a.getInteger(), 4);
+		this.assert('exponent of a', a.getExponent(), 2);
+	},
+	
+	GF256Poly: function() {
+		var p = new GF256Poly();
+		p.set([new GF256Value(0, 1), 1]);
+		this.assert('p', p.toString(), 'x + 1');
+		
+		var p1 = new GF256Poly();
+		p1.set([new GF256Value(1, 1), 1]);
+		this.assert('p1', p1.toString(), 'x + 2');
+		p.multiply(p1);
+		this.assert('p', p.toString(), 'x^2 + 3x + 2');
+		
+		var p2 = new GF256Poly();
+		p2.set([new GF256Value(2, 1), 1]);
+		this.assert('g', p2.toString(), 'x + 4');
+		p.multiply(p2);
+		this.assert('p', p.toString(), 'x^3 + 7x^2 + 14x + 8');
+		
+		var p3 = new GF256Poly();
+		p3.set([new GF256Value(3, 1), 1]);
+		this.assert('p3', p3.toString(), 'x + 8');
+		p.multiply(p3);
+		//this.assert('p', p.toString(), 'x + 1');
+		
+		var p4 = new GF256Poly();
+		p4.set([new GF256Value(4, 1), 1]);
+		this.assert('p4', p4.toString(), 'x + 16');
+		p.multiply(p4);
+		
+		var p5 = new GF256Poly();
+		p5.set([new GF256Value(5, 1), 1]);
+		this.assert('p5', p5.toString(), 'x + 32');
+		p.multiply(p5);
+		
+		var p6 = new GF256Poly();
+		p6.set([new GF256Value(6, 1), 1]);
+		this.assert('p6', p6.toString(), 'x + 64');
+		p.multiply(p6);
+		this.assert('p', p.toString(), 'x^7 + 127x^6 + 122x^5 + 154x^4 + 164x^3 + 11x^2 + 68x + 117');
+		
+		var a = new GF256Poly(2, 2);
+		this.assert('a', a.toString(), '2x^2');
+		a.multiply(p2);
+		a.add(new GF256Poly(3, 1));
+		this.assert('a+p2', a.toString(), '2x^3 + 8x^2 + 3x');
+		this.assert('coeff of x^2 of a', a.getCoeff(2).toString(), '8');
+		
+		var b = new GF256Poly([2, 0, 1]);
+		this.assert('b', b.toString(), 'x^2 + 2');
+		a.modulo(b);
+		this.assert('a%b', a.toString(), '7x + 16');
+		
+		var c = new GF256Poly(3, 3);
+		this.assert('c', c.toString(), '3x^3');
+		a.multiply(c);
+		this.assert('a*c', a.toString(), '9x^4 + 48x^3');
+	},
+		
+	EncodeNumText: function() {
+		// Unit test #1!
+		QRDataEncoder.text = "0123456789012345";
+		QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_NUM;
+		QRDataEncoder.encode();
+		this.assert('QRDataEncoder.dataBits', QRDataEncoder.dataBits, ['0001','0000010000','0000001100','0101011001','1010100110','1110000101','0011101010','0101']);
+	},
+
+	EncodeAlnumText: function() {
+		// Unit test #1!
+		QRDataEncoder.text = "AC-42";
+		QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
+		QRDataEncoder.encode();
+		this.assert('QRDataEncoder.dataBits', QRDataEncoder.dataBits, ['0010','000000101','00111001110','11100111001','000010']);
+		//alert(typeof(
+	},
+	
+	FormatData: function() {
+		QRCreator.format.mask = 4;
+		QRCreator.format.error = 0;
+		this.assert('Format for mask 4, EC L', QRCreator.format.getData(), parseInt("110011000101111", 2));
+	},
+	
+	DataBits: function() {
+		QRDataEncoder.version = 1;
+		QRDataEncoder.ECLevel = 2;
+		QRDataEncoder.text = "HELLO WORLD"
+		QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
+		QRDataEncoder.dataCodewords = null;
+		QRDataEncoder.createDataCodewords();
+		//alert(QRDataEncoder.dataBits);
+		//alert(QRDataEncoder.dataCodewords);
+		// TODO: assert, not alert
+	},
+	
+	ErrorCorrection: function() {
+		QRDataEncoder.version = 2;
+		QRDataEncoder.ECLevel = 0;
+		QRDataEncoder.dataCodewords = [32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17];
+		
+		QRDataEncoder.generateECGenerator();
+		this.assert('EC generator polynomial', QRDataEncoder.ECGenerator.toString(), 'x^10 + 216x^9 + 194x^8 + 159x^7 + 111x^6 + 199x^5 + 94x^4 + 95x^3 + 113x^2 + 157x + 193');
+		QRDataEncoder.generateMessagePolynomial();
+		this.assert('message polynomial', QRDataEncoder.messages[0].toString(), '32x^15 + 91x^14 + 11x^13 + 120x^12 + 209x^11 + 114x^10 + 220x^9 + 77x^8 + 67x^7 + 64x^6 + 236x^5 + 17x^4 + 236x^3 + 17x^2 + 236x + 17');
+		QRDataEncoder.generateErrorPolynomial();
+		this.assert('error polynomial', QRDataEncoder.errorMessage.toString(), '196x^9 + 35x^8 + 39x^7 + 119x^6 + 235x^5 + 215x^4 + 231x^3 + 226x^2 + 93x + 23');
+		this.assert('error codewords', QRDataEncoder.errorCodewords.toString(), '196,35,39,119,235,215,231,226,93,23');
+	},
+
+	// TODO: more unit tests
+	
+	RunAllUnitTests: function() {
+		GF256.init();
+
+		QRUnitTests.GF256Values();
+		QRUnitTests.GF256Poly();
+		QRUnitTests.EncodeNumText();
+		QRUnitTests.EncodeAlnumText();
+		QRUnitTests.FormatData();
+		QRUnitTests.DataBits();
+		QRUnitTests.ErrorCorrection();
+	}
+}
+
+
+QRCreator.canvas = document.getElementById("QR");
+// let's gray it out to start, so we see what's not done yet
+ctx = QRCreator.canvas.getContext("2d");
+ctx.fillStyle="#999999";
+ctx.fillRect(0,0,300,300);
+ctx.fillStyle="#000000";
+
+// now let's start to draw!
+
+// STEP 0: there's a lot of stuff set up in the class above... maybe talk about that too and what's configurable
+
+// STEP 1: initialize
+//QRCreator.setVersion(2);
+QRCreator.setVersion(1);
+QRCreator.setECLevel(0);
+//QRCreator.format.mask = 7;
+QRCreator.initGrid();
+
+// the below is not useful except testing and fun.
+/*QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x81);
+QRCreator.addBlock(0x81);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+QRCreator.addBlock(0x5A);
+//QRCreator.maskGrid();
+QRCreator.displayQR();*/
+
+// STEP 2: create the text
+//QRDataEncoder.text = "01234567890123456789012345678901234567890123456789012345678901234567890123456";
+//QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_NUM;
+
+//QRCreator.setText("01234567890123456789012345678901234567890123456789012345678901234567890123456", QRDataEncoder.TEXTMODE_NUM);
+QRCreator.setText("HELLO WORLD", QRDataEncoder.TEXTMODE_ALNUM);
+
+//QRDataEncoder.text = "01234567890123456789012345678901234567890123456";
+//QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
+
+//QRDataEncoder.text = "0123456789";
+//QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
+
+// STEP 3: encode data // TODO: wrap these functions into .createDataCodewords() function
+//QRDataEncoder.createDataCodewords();
+//alert(QRDataEncoder.dataBits);
+
+//alert(QRDataEncoder.dataCodewords);
+//alert(QRDataEncoder.dataCodewords.length);
+
+// STEP 4: Handle Error correction
+//QRDataEncoder.createErrorCodewords();
+// TODO: this.
+// probably wrap this with the above
+// - createDataCodewords()
+// - createErrorCodewords() // generateErrorCodewords()?
+// ^--> createCodewords()
+
+// STEP 5: put our stuff in the QR class
+//QRCreator.addDataBlocks(QRDataEncoder.dataCodewords);
+//QRCreator.addDataBlocks(QRDataEncoder.errorCodewords);
+
+QRCreator.setAndFillBlocks();
+
+// STEP -1: this is for testing only.
+//QRCreator.fillRemainder()
+
+// STEP 6: mask the data
+//QRCreator.format.mask = 7; // unnecessary
+QRCreator.maskGrid(7);
+// TODO: this should take in an optional parameter -- choose mask. if not provided, figure out which mask is the most ideal. there's a thingy on this for stuff
+
+// STEP 7: Make it visible!
+QRCreator.displayQR();
+//QRCreator.displayQR(false);
+
+function test()
+{
+time = new Date();
+QRCreator.reset();
+QRCreator.setVersion(4);
+QRCreator.setECLevel(0);
+QRCreator.initGrid();
+QRCreator.setText(time.toString(), QRDataEncoder.TEXTMODE_BYTE);
+//alert(time.toString());
+QRCreator.setAndFillBlocks();
+QRCreator.maskGrid(7);
+QRCreator.displayQR();
+}
+
+QRUnitTests.RunAllUnitTests();
+
+</script>
+<br/>
+<button onClick="test(); setInterval(test,5000)">Test</button>
+</body>
+</html>
