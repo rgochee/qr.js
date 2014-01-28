@@ -9,7 +9,7 @@ Your browser does not support the HTML5 canvas tag.
 </canvas>
 <script>
 
-// start external code - we want a deep array compare
+// start external code (deep array compare)
 // attach the .compare method to Array's prototype to call it on any array
 Array.prototype.compare = function (array) {
     // if the other array is a falsy value, return
@@ -36,6 +36,7 @@ Array.prototype.compare = function (array) {
 }
 // end external code
 
+// Returns the log base 2 of the value. Essentially the power of the highest bit
 function log2(val) {
 	var log = -1;
 	while (val > 0) {
@@ -44,103 +45,30 @@ function log2(val) {
 	}
 	return log;
 }
+// Returns a binary modulo (probably not the right way to explain it...)
 function binModulo(dividend, divisor) {
-	var dividendLen = log2(dividend);
-	var divisorLen = log2(divisor);
-	if (dividendLen == 0 || divisorLen == 0)
+	if (divisor == 0)
+	{
+		return -1; // invalid
+	}
+	if (divisor == 1)
 	{
 		return 0;
 	}
-	while (dividendLen >= divisorLen) {
-		dividend ^= divisor << (dividendLen-divisorLen);
-		dividendLen = log2(dividend);
+	
+	var divisorLen = log2(divisor);	
+	for (var dividendLen = log2(dividend);
+	     dividendLen >= divisorLen;
+	     dividendLen = log2(dividend))
+	{
+		dividend ^= divisor << (dividendLen-divisorLen);	
 	}
 	return dividend
 }
 
+// START stuff to define numbers over GF256, a Galois field of order 256
 
-function GF256Value(val, isExp) {
-	if (!val)
-	{
-		val = 0;
-	}
-	if (isExp)
-	{
-		this.setExponent(val);
-	}
-	else
-	{
-		this.setInteger(val);
-	}
-}
-GF256Value.prototype.toString = function() {
-	return ''+this.val;
-}
-GF256Value.prototype.setExponent = function(exp) {
-	this.exp = exp % 255;
-	this.val = GF256.exp(this.exp);
-	return true;
-}
-GF256Value.prototype.setInteger = function(val) {
-	if (val >= 256)
-	{
-		return false;
-	}
-	if (val == 0)
-	{
-		this.val = 0;
-		this.exp = -1;
-		return true;
-	}
-	this.val = val;
-	this.exp = GF256.log(val);
-	return true;
-}
-GF256Value.prototype.getExponent = function(exp) {
-	return this.exp;
-}
-GF256Value.prototype.getInteger = function(val) {
-	return this.val;
-}
-GF256Value.prototype.add = function(other) {
-	if (other)
-	{
-		this.setInteger( this.val ^ other.val );
-	}
-}
-GF256Value.prototype.multiply = function(other) {
-	if (other)
-	{
-		if (other.val == 0 || this.val == 0)
-		{
-			this.setInteger( 0 );
-		}
-		else
-		{
-			this.setExponent( this.exp + other.exp );
-		}
-	}
-}
-GF256Value.prototype.invert = function() {
-	this.setExponent( 255 - this.exp );
-}
-
-GF256Value.add = function(a, b) {
-	result = Object.create(a);
-	result.add(b);
-	return result;
-}
-GF256Value.multiply = function(a, b) {
-	result = Object.create(a);
-	result.multiply(b);
-	return result;
-}
-GF256Value.invert = function(a) {
-	result = Object.create(a);
-	result.invert();
-	return result;
-}
-
+// singleton class that stores log/exp tables for GF256
 var GF256 = {
 	// constants
 	MODULO: 285,
@@ -149,7 +77,9 @@ var GF256 = {
 	logTable: [],	// logTable[val] = exp
 	expTable: [],	// expTable[exp] = vap
 	
+	// initialize the log/exp tables
 	init: function() {
+		// we only need to initialize once
 		if (this.isInit)
 		{
 			return;
@@ -194,6 +124,113 @@ var GF256 = {
 	}
 }
 
+// Creates a value in GF256 (initialized by a value or an exponent of the generator)
+function GF256Value(val, isExp) {
+	// GF256 must be initialized
+	GF256.init();
+	
+	if (!val)
+	{
+		val = 0;
+	}
+	if (isExp)
+	{
+		this.setExponent(val);
+	}
+	else
+	{
+		this.setInteger(val);
+	}
+}
+// returns a string representation of the value. not the generator^exp
+GF256Value.prototype.toString = function() {
+	return ''+this.val;
+}
+// sets value using the exponent of the generator
+GF256Value.prototype.setExponent = function(exp) {
+	if (exp < 0) {
+		exp = exp % 255;
+		exp += 255;
+	}
+	this.exp = exp % 255;
+	this.val = GF256.exp(this.exp);
+	return true;
+}
+// sets the value directly
+GF256Value.prototype.setInteger = function(val) {
+	if (val >= 256 || val < 0)
+	{
+		return false; // invalid
+	}
+	if (val == 0)
+	{
+		this.val = 0;
+		this.exp = -1; // -1 is used to indicate an "invalid" exponent, even though it is valid (but we use 254)
+		return true;
+	}
+	this.val = val;
+	this.exp = GF256.log(val);
+	return true;
+}
+// gets value of the exponent using generator representation
+GF256Value.prototype.getExponent = function(exp) {
+	return this.exp;
+}
+// gets value directly
+GF256Value.prototype.getInteger = function(val) {
+	return this.val;
+}
+// adds another GF256Value to current value
+GF256Value.prototype.add = function(other) {
+	if (other)
+	{
+		this.setInteger( this.val ^ other.val );
+	}
+	return this;
+}
+// multiplies another GF256Value to current value
+GF256Value.prototype.multiply = function(other) {
+	if (other)
+	{
+		if (other.val == 0 || this.val == 0)
+		{
+			this.setInteger( 0 );
+		}
+		else
+		{
+			this.setExponent( this.exp + other.exp );
+		}
+	}
+	return this;
+}
+// sets the value to the multiplicative inverse
+GF256Value.prototype.invert = function() {
+	this.setExponent( 255 - this.exp );
+	return this;
+}
+
+// static functions
+GF256Value.add = function(a, b) {
+	result = Object.create(a);
+	result.add(b);
+	return result;
+}
+GF256Value.multiply = function(a, b) {
+	result = Object.create(a);
+	result.multiply(b);
+	return result;
+}
+GF256Value.invert = function(a) {
+	result = Object.create(a);
+	result.invert();
+	return result;
+}
+
+// creates a polynomial in GF256[x]
+// value, term are both optional parameters
+// if term is not set, value is a list of coefficients as in [1, x, x^2, ...]
+// if term is set, then it sets the coefficient of x^term to the value
+// value can be a GF256Value or an integer (automatically converted to a GF256Value)
 function GF256Poly(value, term) {
 	this.poly = [new GF256Value(0)];
 	if (typeof(value) != 'undefined')
@@ -201,62 +238,78 @@ function GF256Poly(value, term) {
 		this.set(value, term);
 	}
 }
+// string representation of the polynomial with higher order terms first, e.g. "3x^2 + 2x + 1"
 GF256Poly.prototype.toString = function() {
-	temp = '';
+	// no terms/uninitialized
 	if (!this.poly || this.poly.length == 0)
 	{
 		return '';
 	}
 	
+	// initialized but no variable term
 	if (this.poly.length == 1)
 	{
-		if (this.poly[0] == 0)
-		{
-			return '0';
-		}
-		
+		// convert integer to string
 		return ''+this.poly[0];
 	}
 	
+	// set up a temporary string
+	temp = '';
+	
+	// start with highest order term
 	var i = this.poly.length-1;
 	if (this.poly[i].getInteger() != 1)
 	{
+		// display coefficient if non unit
 		temp += this.poly[i];
 	}
 	if (i == 1)
 	{
+		// display x
 		temp += 'x'
 	}
 	else if (i > 1)
 	{
+		// display power of x
 		temp += 'x^'+i;
 	}
 	
 	for (--i; i >= 0; --i)
 	{
+		// start displaying lower powers
 		if (this.poly[i].getInteger() != 0)
 		{
 			temp += ' + ';
 			if (this.poly[i].getInteger() != 1 || i == 0)
 			{
+				// display coefficient of the power
 				temp += this.poly[i];
 			}
 			
 			if (i == 1)
 			{
+				// display x
 				temp += 'x'
 			}
 			else if (i > 1)
 			{
+				// display power of x
 				temp += 'x^'+i;
 			}
+			// i==0 term will not get the x treatment
 		}
 	}
 	return temp;
 }
+// sets value of polynomial
+// term is an optional parameter
+// if term is not set, value is a list of coefficients as in [1, x, x^2, ...], overriding any original values
+// if term is set, then it sets the coefficient of x^term to the value
+// value can be a GF256Value or an integer (automatically converted to a GF256Value)
 GF256Poly.prototype.set = function(value, term) {
 	if (typeof(term) == 'undefined')
 	{
+		this.poly = [];
 		for (var i = 0; i < value.length; ++i)
 		{
 			if (GF256Value.prototype.isPrototypeOf(value[i]))
@@ -287,11 +340,14 @@ GF256Poly.prototype.set = function(value, term) {
 			}
 		}
 	}
+	// when value is 0, we can have leading 0 terms in the function. clear those out
 	this.clearLeadingTerms();
 }
+// returns the leading coefficient
 GF256Poly.prototype.getMaxTerm = function() {
 	return this.poly.length-1;
 }
+// returns the coefficient of the term whose exponent is [term]
 GF256Poly.prototype.getCoeff = function(term) {
 	if (term < this.poly.length)
 	{
@@ -299,6 +355,7 @@ GF256Poly.prototype.getCoeff = function(term) {
 	}
 	return 0;
 }
+// clears out leading terms that are 0, e.g. 0x^2 + 1 -> 1
 GF256Poly.prototype.clearLeadingTerms = function() {
 	for (i = this.poly.length-1; i > 0; --i)
 	{
@@ -309,18 +366,26 @@ GF256Poly.prototype.clearLeadingTerms = function() {
 		}
 	}
 }
+// adds value of other polynomial to this, returning new result
 GF256Poly.prototype.add = function(other) {
 	var i;
+	// through the length of this polynomial, add the two
 	for (i = 0; i < this.poly.length; ++i)
 	{
 		this.poly[i].add(other.poly[i]);
 	}
+	// the other polynomial is bigger. just set those terms directly
 	for ( ; i < other.poly.length; ++i)
 	{
 		this.poly[i] = other.poly[i];
 	}
+	
+	// adding two polynomials can result in leading 0 terms in the function. clear those out
 	this.clearLeadingTerms();
+	
+	return this;
 }
+// multiplies value of other polynomial to this, returning new result
 GF256Poly.prototype.multiply = function(other) {
 	var temp = this.poly;
 	this.poly = [];
@@ -335,19 +400,29 @@ GF256Poly.prototype.multiply = function(other) {
 			this.poly[i+j].add(GF256Value.multiply(temp[i], other.poly[j]));
 		}
 	}
+	
+	return this;
 }
+// sets value to this%other, returning new result
 GF256Poly.prototype.modulo = function(other) {
+	// while polynomial is bigger than modulus
 	while (this.poly.length >= other.poly.length)
 	{
+		// multiply modulus by c*x^e such that modulus and current polynomial will have matching leading terms
+		// c = leading coefficient, e = this leading exponent - modulus leading exponent
 		b = new GF256Poly(this.poly[this.poly.length-1], this.poly.length - other.poly.length);
 		b.multiply(other);
+		// add to cancel out leading terms
 		this.add(b);
 	}
-}
-GF256Poly.prototype.invert = function() {
-	this.setExponent( 256 - this.exp );
+	
+	return this;
 }
 
+// END GF256 related functions
+
+// singleton that acts as our data encoder
+// TODO: should this really be a singleton?
 var QRDataEncoder = {
 	// constants
 	TEXTMODE_ECI: 7,
@@ -580,19 +655,25 @@ var QRDataEncoder = {
 		return dataBlocks[this.version][this.ECLevel]
 	},
 	
+	// TODO: calculate minimum version given character capacities, mode, and error correction level
+	
 	zeroPadBitsBase2: function(num, length) {
 		// assumes that no input will be more than 16 bits
 		return ("0000000000000000" + num.toString(2)).slice(-length);
 	
 	},
 	
-	encodeChar: function(ch) { // note: make this take in textmode as param too?
-		if (this.textMode == this.TEXTMODE_NUM) {
+	encodeChar: function(ch, textmode) {
+		if (!textmode)
+		{
+			textmode = this.textMode;
+		}
+		if (textmode == this.TEXTMODE_NUM) {
 			if (ch >= "0" && ch <= "9") {
 				return ch.charCodeAt(0)-0x30;
 			}
 		}
-		if (this.textMode == this.TEXTMODE_ALNUM) {
+		if (textmode == this.TEXTMODE_ALNUM) {
 			var code = ch.charCodeAt(0);
 			if (ch >= "0" && ch <= "9") {
 				return code-0x30;
@@ -621,17 +702,12 @@ var QRDataEncoder = {
 					return 44;
 			}
 		}
-		if (this.textMode == this.TEXTMODE_BYTE) {
+		if (textmode == this.TEXTMODE_BYTE) {
 			return ch.charCodeAt(0);
 		}
+		// NOTE: Kanji not currently supported
 		return 0;
 	},
-	
-	/*
-	function to pad numbers formatted as binary strings? used with encode to make things a lot easier
-	var temp = myBaseTenNumber.toString(2);
-	("0000000000" + temp).slice(-11);
-	*/
 	
 	encodeData: function() {
 		// TODO: I think there's a problem if the text is supersuper tiny. check it
@@ -743,7 +819,6 @@ var QRDataEncoder = {
 		for (var i = 1; i < this.numErrorCodewords(); ++i)
 		{
 			this.ECGenerator.multiply(new GF256Poly([new GF256Value(GF256.exp(i)), 1]));
-			//alert(this.ECGenerator);
 		}
 	},
 	
@@ -763,7 +838,7 @@ var QRDataEncoder = {
 	
 	generateErrorPolynomial: function() {
 		GF256.init();
-		this.errorMessage = this.messages[0];
+		this.errorMessage = this.messages[0]; // TODO: handle bigger block sizes
 		this.errorMessage.multiply(new GF256Poly(1, this.ECGenerator.getMaxTerm()));
 		this.errorMessage.modulo(this.ECGenerator);
 		this.errorCodewords = [];
@@ -873,7 +948,7 @@ var QRCreator = {
 		this.setText('', 0);
 		this.setVersion(1);
 		this.setECLevel(0);
-		//this.canvas = null;
+		this.resetCanvas();
 		this.size = 6;
 		this.textData = null;
 		this.grid = null;
@@ -1027,7 +1102,30 @@ var QRCreator = {
 	},
 	
 	// main functions
-	initGrid: function() {
+	setupCanvas: function(canvas) {
+		this.canvas = canvas;
+		this.resetCanvas();
+	},
+	resetCanvas: function() {
+		var ctx = this.canvas.getContext("2d");
+		
+		// let's gray it out to start, so we see what's not done yet
+		ctx.fillStyle="#999999";
+		ctx.fillRect(0,0,300,300); // arbitrary size
+		
+		// draw the rest in black
+		ctx.fillStyle="#000000";
+	},
+
+	initGrid: function(version) {
+		// do not accept invalid versions
+		if (!version || version < 1 || version > 40)
+		{
+			return;
+		}
+		
+		this.setVersion(version);
+		
 		this.grid = Array(this.getWidth()+8);
 		for (var i = 0; i < this.grid.length; ++i) {
 			this.grid[i] = Array(this.getWidth()+8);
@@ -1045,12 +1143,13 @@ var QRCreator = {
 	},
 	
 	displayGrid: function() {
+		var ctx = this.canvas.getContext("2d");
 		for (var i = 0; i < this.grid.length; ++i) {
 			for (var j = 0; j < this.grid[i].length; ++j) {
 				if (this.grid[i][j]) {
-					this.canvas.getContext("2d").fillRect(i*this.size, j*this.size, this.size, this.size);
+					ctx.fillRect(i*this.size, j*this.size, this.size, this.size);
 				} else if (this.grid[i][j] == 0) {
-					this.canvas.getContext("2d").clearRect(i*this.size, j*this.size, this.size, this.size);
+					ctx.clearRect(i*this.size, j*this.size, this.size, this.size);
 				}
 			}
 		}
@@ -1089,9 +1188,6 @@ var QRCreator = {
 	},
 	
 	drawFormat: function() {
-		//this.format.mask = 4;
-		//this.setVersion(1);
-		//this.setECLevel(0);
 		var format = this.format.getData();
 		var width = this.getWidth();
 		
@@ -1133,9 +1229,11 @@ var QRCreator = {
 	},
 	
 	drawVersion: function() {
+		// version info is only used in QR versions 7+
 		if (this.version.number < 7) {
 			return;
 		}
+		
 		this.colorModule(9,15);
 		var ver = this.version.getData();
 		var width = this.getWidth();
@@ -1147,11 +1245,13 @@ var QRCreator = {
 		}
 	},
 	
-	setAndFillBlocks: function() {
+	createAndFillBlocks: function() {
 		this.myQRDataEncoder.createDataCodewords();
 		this.myQRDataEncoder.createErrorCodewords();
 		this.addDataBlocks(this.myQRDataEncoder.dataCodewords);
 		this.addDataBlocks(this.myQRDataEncoder.errorCodewords);
+		this.fillRemainder(); // TODO: this is necessary for certain versions I think, but I don't think it's implemented how it would need to be
+		                      // essentially sometimes the blocks don't fill up the entire grid, so do it in this function
 	},
 	
 	displayQR: function(drawFull) {
@@ -1167,6 +1267,7 @@ var QRCreator = {
 
 var QRUnitTests = 
 {
+	// TODO: at beginning of function, set up so assert will also say which function you're in
 	assert: function(varName, actualValue, expectedValue) {
 		if (typeof(actualValue) != typeof(expectedValue))
 		{
@@ -1201,12 +1302,26 @@ var QRUnitTests =
 		this.assert('exponent of b', b.getExponent(), 1);
 		
 		a.multiply(b);
-		this.assert('a', a.getInteger(), 1);
-		this.assert('exponent of a', a.getExponent(), 0);
+		this.assert('a*b', a.getInteger(), 1);
+		this.assert('exponent of a*b', a.getExponent(), 0);
 		
-		var a = new GF256Value(2, 1);
-		this.assert('a', a.getInteger(), 4);
-		this.assert('exponent of a', a.getExponent(), 2);
+		var c = new GF256Value(2, 1);
+		this.assert('c', c.getInteger(), 4);
+		this.assert('exponent of c', c.getExponent(), 2);
+		
+		var d = new GF256Value(0);
+		this.assert('d', d.getInteger(), 0);
+		this.assert('exponent of d', d.getExponent(), -1);
+		
+		var e = new GF256Value(0);
+		e.setExponent(256);
+		this.assert('e', e.getInteger(), 2);
+		this.assert('exponent of e', e.getExponent(), 1);
+		
+		var f = new GF256Value(0);
+		f.setExponent(-2);
+		this.assert('f', f.getInteger(), 71);
+		this.assert('exponent of f', f.getExponent(), 253);
 	},
 	
 	GF256Poly: function() {
@@ -1230,7 +1345,6 @@ var QRUnitTests =
 		p3.set([new GF256Value(3, 1), 1]);
 		this.assert('p3', p3.toString(), 'x + 8');
 		p.multiply(p3);
-		//this.assert('p', p.toString(), 'x + 1');
 		
 		var p4 = new GF256Poly();
 		p4.set([new GF256Value(4, 1), 1]);
@@ -1254,6 +1368,8 @@ var QRUnitTests =
 		a.add(new GF256Poly(3, 1));
 		this.assert('a+p2', a.toString(), '2x^3 + 8x^2 + 3x');
 		this.assert('coeff of x^2 of a', a.getCoeff(2).toString(), '8');
+		this.assert('high order term exponent of a', a.getMaxTerm().toString(), '3');
+		this.assert('coeff of high order term of a', a.getCoeff(a.getMaxTerm()).toString(), '2');
 		
 		var b = new GF256Poly([2, 0, 1]);
 		this.assert('b', b.toString(), 'x^2 + 2');
@@ -1267,20 +1383,17 @@ var QRUnitTests =
 	},
 		
 	EncodeNumText: function() {
-		// Unit test #1!
 		QRDataEncoder.text = "0123456789012345";
 		QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_NUM;
 		QRDataEncoder.encode();
-		this.assert('QRDataEncoder.dataBits', QRDataEncoder.dataBits, ['0001','0000010000','0000001100','0101011001','1010100110','1110000101','0011101010','0101']);
+		this.assert('QRDataEncoder.dataBits (num)', QRDataEncoder.dataBits, ['0001','0000010000','0000001100','0101011001','1010100110','1110000101','0011101010','0101']);
 	},
 
 	EncodeAlnumText: function() {
-		// Unit test #1!
 		QRDataEncoder.text = "AC-42";
 		QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
 		QRDataEncoder.encode();
-		this.assert('QRDataEncoder.dataBits', QRDataEncoder.dataBits, ['0010','000000101','00111001110','11100111001','000010']);
-		//alert(typeof(
+		this.assert('QRDataEncoder.dataBits (alnum)', QRDataEncoder.dataBits, ['0010','000000101','00111001110','11100111001','000010']);
 	},
 	
 	FormatData: function() {
@@ -1299,6 +1412,13 @@ var QRUnitTests =
 		//alert(QRDataEncoder.dataBits);
 		//alert(QRDataEncoder.dataCodewords);
 		// TODO: assert, not alert
+		
+		// TODO: try these, I they're max length for version 2-L
+		//QRDataEncoder.text = "01234567890123456789012345678901234567890123456789012345678901234567890123456";
+		//QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_NUM;
+
+		//QRDataEncoder.text = "01234567890123456789012345678901234567890123456";
+		//QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
 	},
 	
 	ErrorCorrection: function() {
@@ -1330,137 +1450,63 @@ var QRUnitTests =
 	}
 }
 
-
-QRCreator.canvas = document.getElementById("QR");
-// let's gray it out to start, so we see what's not done yet
-ctx = QRCreator.canvas.getContext("2d");
-ctx.fillStyle="#999999";
-ctx.fillRect(0,0,300,300);
-ctx.fillStyle="#000000";
-
 // now let's start to draw!
 
-// STEP 0: there's a lot of stuff set up in the class above... maybe talk about that too and what's configurable
+// STEP 0: set up your drawing area
+QRCreator.setupCanvas(document.getElementById("QR"));
 
-// STEP 1: initialize
-//QRCreator.setVersion(2);
-QRCreator.setVersion(1);
+// TODO: rearrange these steps as follows:
+//   STEP 1:
+//     set text+text mode
+//     set EC level
+//   STEP 2:
+//     based on the above, init grid based on the minimum size necessary (or override if desired)
+//   STEP 3:
+//     add blocks
+//   etc.
+
+// STEP 1: initialize the grid. Note that version must be set
+QRCreator.initGrid(1);
+
+// STEP 2: set up error correction level (and other settings?)
 QRCreator.setECLevel(0);
-//QRCreator.format.mask = 7;
-QRCreator.initGrid();
 
-// the below is not useful except testing and fun.
-/*QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x81);
-QRCreator.addBlock(0x81);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-QRCreator.addBlock(0x5A);
-//QRCreator.maskGrid();
-QRCreator.displayQR();*/
-
-// STEP 2: create the text
-//QRDataEncoder.text = "01234567890123456789012345678901234567890123456789012345678901234567890123456";
-//QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_NUM;
-
-//QRCreator.setText("01234567890123456789012345678901234567890123456789012345678901234567890123456", QRDataEncoder.TEXTMODE_NUM);
+// STEP 3: set up the text and specify text mode/encoding
 QRCreator.setText("HELLO WORLD", QRDataEncoder.TEXTMODE_ALNUM);
 
-//QRDataEncoder.text = "01234567890123456789012345678901234567890123456";
-//QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
+// TODO: setting EC level could be either part of setText or createAndFillBlocks()
 
-//QRDataEncoder.text = "0123456789";
-//QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
+// STEP 4: Fill the data in the QR class
+QRCreator.createAndFillBlocks();
 
-// STEP 3: encode data // TODO: wrap these functions into .createDataCodewords() function
-//QRDataEncoder.createDataCodewords();
-//alert(QRDataEncoder.dataBits);
-
-//alert(QRDataEncoder.dataCodewords);
-//alert(QRDataEncoder.dataCodewords.length);
-
-// STEP 4: Handle Error correction
-//QRDataEncoder.createErrorCodewords();
-// TODO: this.
-// probably wrap this with the above
-// - createDataCodewords()
-// - createErrorCodewords() // generateErrorCodewords()?
-// ^--> createCodewords()
-
-// STEP 5: put our stuff in the QR class
-//QRCreator.addDataBlocks(QRDataEncoder.dataCodewords);
-//QRCreator.addDataBlocks(QRDataEncoder.errorCodewords);
-
-QRCreator.setAndFillBlocks();
-
-// STEP -1: this is for testing only.
-//QRCreator.fillRemainder()
-
-// STEP 6: mask the data
-//QRCreator.format.mask = 7; // unnecessary
+// STEP 5: mask the data
 QRCreator.maskGrid(7);
-// TODO: this should take in an optional parameter -- choose mask. if not provided, figure out which mask is the most ideal. there's a thingy on this for stuff
+// TODO: this should take in an optional parameter -- choose mask. if not provided, figure out which mask is the most ideal. there's a thingy on this to decide what's best
+// TODO: really, this should be an optional function and displayQR should do it if not provided
 
-// STEP 7: Make it visible!
+// STEP 6: Make it visible!
 QRCreator.displayQR();
-//QRCreator.displayQR(false);
 
+
+// NOTE: below is the fun stuff for making timestamp QR codes.
+testmask = 0;
 function test()
 {
-time = new Date();
-QRCreator.reset();
-QRCreator.setVersion(4);
-QRCreator.setECLevel(0);
-QRCreator.initGrid();
-QRCreator.setText(time.toString(), QRDataEncoder.TEXTMODE_BYTE);
-//alert(time.toString());
-QRCreator.setAndFillBlocks();
-QRCreator.maskGrid(7);
-QRCreator.displayQR();
+	QRCreator.reset();
+	QRCreator.setECLevel(0);
+	QRCreator.initGrid(4);
+	QRCreator.setText((new Date()).toString(), QRDataEncoder.TEXTMODE_BYTE);
+	QRCreator.createAndFillBlocks();
+	QRCreator.maskGrid(testmask%8);
+	testmask++;
+	QRCreator.displayQR();
 }
 
+// Unit tests are run here!
 QRUnitTests.RunAllUnitTests();
 
 </script>
 <br/>
-<button onClick="test(); setInterval(test,5000)">Test</button>
+<button onClick="test(); setInterval(test,500)">Test</button>
 </body>
 </html>
