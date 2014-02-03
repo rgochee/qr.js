@@ -36,99 +36,97 @@ Array.prototype.compare = function (array) {
 }
 // end external code
 
-// Returns the log base 2 of the value. Essentially the power of the highest bit
-function log2(val) {
-	var log = -1;
-	while (val > 0) {
-		log++;
-		val >>= 1;
-	}
-	return log;
-}
-// Returns a binary modulo (probably not the right way to explain it...)
-function binModulo(dividend, divisor) {
-	if (divisor == 0)
-	{
-		return -1; // invalid
-	}
-	if (divisor == 1)
-	{
-		return 0;
-	}
+// Binary math helper functions
+var BinMath = {};
+(function() {
+	// Returns the log base 2 of the value. Essentially the power of the highest bit
+	this.log = function(val) {
+		var log = -1;
+		while (val > 0) {
+			log++;
+			val >>= 1;
+		}
+		return log;
+	};
 	
-	var divisorLen = log2(divisor);	
-	for (var dividendLen = log2(dividend);
-	     dividendLen >= divisorLen;
-	     dividendLen = log2(dividend))
-	{
-		dividend ^= divisor << (dividendLen-divisorLen);	
-	}
-	return dividend
-}
+	// Returns a binary modulo (probably not the right way to explain it...)
+	this.modulo = function(dividend, divisor) {
+		if (divisor == 0)
+		{
+			return -1; // invalid
+		}
+		if (divisor == 1)
+		{
+			return 0;
+		}
+		
+		var divisorLen = this.log(divisor);	
+		for (var dividendLen = this.log(dividend);
+			 dividendLen >= divisorLen;
+			 dividendLen = this.log(dividend))
+		{
+			dividend ^= divisor << (dividendLen-divisorLen);	
+		}
+		return dividend;
+	};
+}).call(BinMath);
 
 // START stuff to define numbers over GF256, a Galois field of order 256
 
-// singleton class that stores log/exp tables for GF256
-var GF256 = {
+// variable that stores log/exp tables for GF256
+var GF256 = {};
+(function() {
 	// constants
-	MODULO: 285,
+	this._MODULO = 285;
 	
 	// given alpha^exp = integer
-	logTable: [],	// logTable[val] = exp
-	expTable: [],	// expTable[exp] = vap
+	this._logTable = [];	// logTable[val] = exp
+	this._expTable = [];	// expTable[exp] = vap
 	
-	// initialize the log/exp tables
-	init: function() {
-		// we only need to initialize once
-		if (this.isInit)
-		{
-			return;
-		}
+	// helper functions
+	this.log = function(val) {
+		return this._logTable[val];
+	};
+	this.exp = function(exp) {
+		return this._expTable[exp];
+	};
+	this.add = function(a, b) {
+		return a ^ b;
+	};
+	this.multiply = function(a, b) {
+		var expa = this._logTable[a];
+		var expb = this._logTable[b];
+		var expc = (expa + expb) % 255;
+		return this.exp(expc);
+	};
+	this.inverse = function(val) {
+		var exp = this.log(val);
+		var invexp = 255-exp;
+		return this.exp(invexp);
+	};
+	
+	// Now set up and call function to initialize the log/exp tables
+	this._init = function() {
 		var exp = 0;
 		var val = 1;
 		for (var exp = 0; exp < 256; ++exp)
 		{
-			this.logTable[val] = exp;
-			this.expTable[exp] = val;
+			this._logTable[val] = exp;
+			this._expTable[exp] = val;
 			
 			val *= 2;
 			if (val >= 256)
 			{
-				val ^= this.MODULO;
+				val ^= this._MODULO;
 			}
 		}
-		this.logTable[1] = 0;
-		this.isInit = true;
-	},
-	
-	// helper functions
-	add: function(a, b) {
-		return a ^ b;
-	},
-	multiply: function(a, b) {
-		var expa = this.logTable[a];
-		var expb = this.logTable[b];
-		var expc = (expa + expb) % 255;
-		return this.expTable[expc];
-	},
-	inverse: function(val) {
-		var exp = this.expTable[val];
-		var invexp = 255-exp;
-		return this.logTable[invexp];
-	},
-	log: function(val) {
-		return this.logTable[val];
-	},
-	exp: function(exp) {
-		return this.expTable[exp];
-	}
-}
+		this._logTable[1] = 0;
+	};
+	this._init();
+}).call(GF256);
 
-// Creates a value in GF256 (initialized by a value or an exponent of the generator)
+// Class that represents a value in GF256 (initialized by a value or an exponent of the generator)
 function GF256Value(val, isExp) {
-	// GF256 must be initialized
-	GF256.init();
-	
 	if (!val)
 	{
 		val = 0;
@@ -425,18 +423,21 @@ GF256Poly.prototype.modulo = function(other) {
 // TODO: should this really be a singleton?
 var QRDataEncoder = {
 	// constants
-	TEXTMODE_ECI: 7,
-	TEXTMODE_NUM: 1,
-	TEXTMODE_ALNUM: 2,
-	TEXTMODE_BYTE: 4,
-	TEXTMODE_KANJI: 8,
-	TEXTMODE_FNC11: 5,
-	TEXTMODE_FNC12: 9,
-	TEXTMODE_EOM: 0,
+	TEXTMODE_NUM:    1,
+	TEXTMODE_ALNUM:  2,
+	TEXTMODE_BYTE:   4,
+	TEXTMODE_KANJI:  8, // unsupported
+	TEXTMODE_APPEND: 3, // unsupported
+	TEXTMODE_ECI:    7, // unsupported
+	TEXTMODE_FNC11:  5, // unsupported
+	TEXTMODE_FNC12:  9, // unsupported
+	TEXTMODE_EOM:    0,
 	
 	// local vars
 	text: "",
-	textMode: this.TEXTMODE_EOM, // I am lazy! no mixed modes, yo!
+	textmode: this.TEXTMODE_EOM, // NOTE: mixed modes are unsupported, but it shouldn't be _too_ hard to code.
+	                             // the interface could change to: SetText()/AppendText() with this.text[{text,mode}, ...]
+	                             // likewise, a bunch of helper functions should be fixed, like getMinimumVersionRequired(), encodeBits(), etc.
 	data: null,
 	dataLength: 0,
 	dataBits: null,
@@ -445,53 +446,82 @@ var QRDataEncoder = {
 	ECLevel: 0, // 0=L, 1=M, 2=Q, 3=H
 	
 	// functions
-	numDataBits : function(count) {
-		switch (this.textMode)
+	
+	// Returns the number of data bits for each code of a given string
+	numDataBits : function(count, textmode) {
+		if (!textmode)
+		{
+			textmode = this.textmode;
+		}
+		
+		switch (textmode)
 		{
 			case this.TEXTMODE_NUM:
 				if (count >= 3) {
+					// each trio of characters is represented by a 10-bit string
 					return 10;
 				}
 				if (count == 2) {
+					// a terminal pair of characters is represented by a 7-bit string
 					return 7;
 				}
 				if (count == 1) {
+					// a single terminal character is represented by a 4-bit string
 					return 4;
 				}
 			break;
 			case this.TEXTMODE_ALNUM:
 				if (count >= 2) {
+					// each pair of characters is represented by an 11-bit string
 					return 11;
 				}
 				if (count == 1) {
+					// a terminal character is represented by a 6-bit string
 					return 6;
 				}
 			break;
 			case this.TEXTMODE_BYTE:
+				// each character represented by an 8-bit string
 				return 8;
 			break;
 			case this.TEXTMODE_KANJI:
+				// each character represented by a 13-bit string
 				return 13;
 			break;
-			default:
-				return 0;
 		}
+		// unknown text mode
 		return 0;
 	},
 	
-	numCountBits : function() {
-		if (this.version <= 0 || this.version > 40) {
+	// Returns the number of bits for the character count indicator
+	numCountBits : function(version, textmode) {
+		if (!version)
+		{
+			version = this.version;
+		}
+		if (!textmode)
+		{
+			textmode = this.textmode;
+		}
+		
+		// check for invalid version
+		if (version <= 0 || version > 40) {
 			return 0;
 		}
-		if (this.textMode == this.TEXTMODE_BYTE) {
-			if (this.version <= 9) {
+		
+		// Byte mode has simple count bits
+		if (textmode == this.TEXTMODE_BYTE) {
+			if (version <= 9) {
 				return 8;
 			} else {
 				return 16;
 			}
 		}
+		
+		// num, alnum and kanji are more complicated.
+		// it can be seen as a base count that's incremented by 2 at two different points
 		var count = 0;
-		switch (this.textMode)
+		switch (textmode)
 		{
 			case this.TEXTMODE_NUM:
 				count = 10;
@@ -502,20 +532,34 @@ var QRDataEncoder = {
 			case this.TEXTMODE_KANJI:
 				count = 8;
 			break;
+			// invalid mode
 			default:
 				return 0;
 		}
-		if (this.version <= 9) {
-			return count;
+		// version 10+ needs additional 2 bits
+		if (version >= 10) {
+			count += 2;
 		}
-		if (this.version >= 27)
+		// version 27+ need another additional 2 bits
+		if (version >= 27)
 		{
-			return count+4;
+			count += 2;
 		}
-		return count+2;
+		
+		return count;
 	},
 	
-	numDataCodewords: function() {
+	// Returns the number of required data codewords for the specified QR code version+level
+	numDataCodewords: function(version, ECLevel) {
+		if (!version)
+		{
+			version = this.version;
+		}
+		if (!ECLevel)
+		{
+			ECLevel = this.ECLevel;
+		}
+		
 		var dataCodewords = [[]
 							,[19, 16, 13, 9] //1
 							,[34, 28, 22, 16] //2
@@ -558,9 +602,10 @@ var QRDataEncoder = {
 							,[2812, 2216, 1582, 1222] //39
 							,[2956, 2334, 1666, 1276] //40 
 							];
-		return dataCodewords[this.version][this.ECLevel]
+		return dataCodewords[version][ECLevel]
 	},
 	
+	// Returns the number of required error codewords for the specified QR code version+level
 	numErrorCodewords: function() {
 		var dataECCodewords = [[]
 							,[7, 10, 13, 17] //1
@@ -608,6 +653,8 @@ var QRDataEncoder = {
 		return dataECCodewords[this.version][this.ECLevel]
 	},
 	
+	// Returns the number of and size of the error correction blocks for the specified QR code version+level
+	// TODO: a lot.
 	numDataBlocks: function() {
 		var dataBlocks = [[]
 							,[1, 1, 1, 1] //1
@@ -655,18 +702,66 @@ var QRDataEncoder = {
 		return dataBlocks[this.version][this.ECLevel]
 	},
 	
-	// TODO: calculate minimum version given character capacities, mode, and error correction level
+	// Calculates minimum version requried given text encoding, and error correction level
+	getMinimumVersionRequired: function() {
+		var charCount = this.text.length;
+		
+		// wrap the following into a numBitsRequired function?
+		var bitsRequired = 0;
+		if (this.textmode == this.TEXTMODE_NUM)
+		{
+			while (charCount > 0)
+			{
+				bitsRequired += this.numDataBits(charCount);
+				charCount -= 3;
+			}
+		}
+		else if (this.textmode == this.TEXTMODE_ALNUM)
+		{
+			while (charCount > 0)
+			{
+				bitsRequired += this.numDataBits(charCount);
+				charCount -= 2;
+			}
+		}
+		else if (this.textmode == this.TEXTMODE_BYTE)
+		{
+			bitsRequired = charCount * 8;
+		}
+		else if (this.textmode == this.TEXTMODE_KANJI)
+		{
+			bitsRequired = charCount * 13;
+		}
+		else
+		{
+			return 0;
+		}
+		
+		// Now that we know how many bits we need, find the smallest version that gives it to us
+		for (var version = 1; version < 40; ++version)
+		{
+			var totalBits = this.numDataCodewords(version)*8; // data blocks -> bits
+			totalBits -= 4; // subtract encoding bits
+			totalBits -= this.numCountBits(version); // subtract character count bits
+			
+			if (totalBits >= bitsRequired)
+			{
+				return version;
+			}
+		}
+		
+		return 0;
+	},
 	
 	zeroPadBitsBase2: function(num, length) {
 		// assumes that no input will be more than 16 bits
 		return ("0000000000000000" + num.toString(2)).slice(-length);
-	
 	},
 	
 	encodeChar: function(ch, textmode) {
 		if (!textmode)
 		{
-			textmode = this.textMode;
+			textmode = this.textmode;
 		}
 		if (textmode == this.TEXTMODE_NUM) {
 			if (ch >= "0" && ch <= "9") {
@@ -711,7 +806,7 @@ var QRDataEncoder = {
 	
 	encodeData: function() {
 		// TODO: I think there's a problem if the text is supersuper tiny. check it
-		if (this.textMode == this.TEXTMODE_NUM) {
+		if (this.textmode == this.TEXTMODE_NUM) {
 			var i = 0;
 			this.data = [this.TEXTMODE_NUM, this.text.length];
 			while (i < this.text.length) {
@@ -723,7 +818,7 @@ var QRDataEncoder = {
 				this.data.push(num);
 				i+=3;
 			}
-		} else if (this.textMode == this.TEXTMODE_ALNUM) {
+		} else if (this.textmode == this.TEXTMODE_ALNUM) {
 			var i = 0;
 			this.data = [this.TEXTMODE_ALNUM, this.text.length];
 			while (i < this.text.length-1) {
@@ -735,7 +830,7 @@ var QRDataEncoder = {
 				this.data.push(this.encodeChar(this.text[i]));
 				i++;
 			}
-		} else if (this.textMode == this.TEXTMODE_BYTE) {
+		} else if (this.textmode == this.TEXTMODE_BYTE) {
 			this.data = [this.TEXTMODE_BYTE, this.text.length];
 			for (var i = 0; i < this.text.length; ++i) {
 				this.data.push(this.encodeChar(this.text[i]));
@@ -761,9 +856,9 @@ var QRDataEncoder = {
 			var numDataBits = this.numDataBits(charCount);
 			this.dataBits[i] = this.zeroPadBitsBase2(this.data[i], numDataBits);
 			this.dataLength += numDataBits;
-			if (this.textMode == this.TEXTMODE_NUM) {
+			if (this.textmode == this.TEXTMODE_NUM) {
 				charCount -= 3;
-			} else if (this.textMode == this.TEXTMODE_ALNUM) {
+			} else if (this.textmode == this.TEXTMODE_ALNUM) {
 				charCount -= 2;
 			} else {
 				charCount--;
@@ -814,7 +909,6 @@ var QRDataEncoder = {
 	},
 	
 	generateECGenerator: function() {
-		GF256.init();
 		this.ECGenerator = new GF256Poly([1, 1])
 		for (var i = 1; i < this.numErrorCodewords(); ++i)
 		{
@@ -823,7 +917,6 @@ var QRDataEncoder = {
 	},
 	
 	generateMessagePolynomial: function() {
-		GF256.init();
 		this.messages = [];
 		//for (var i = 0; i < this.numDataBlocks(); ++i)
 		var i = 0; // TODO: handle bigger block sizes
@@ -837,7 +930,6 @@ var QRDataEncoder = {
 	},
 	
 	generateErrorPolynomial: function() {
-		GF256.init();
 		this.errorMessage = this.messages[0]; // TODO: handle bigger block sizes
 		this.errorMessage.multiply(new GF256Poly(1, this.ECGenerator.getMaxTerm()));
 		this.errorMessage.modulo(this.ECGenerator);
@@ -859,7 +951,7 @@ var QRDataEncoder = {
 var QRCreator = {
 	// local vars
 	canvas: null,
-	size: 6,
+	size: 6, // default size
 	
 	textData: null,
 	
@@ -871,8 +963,8 @@ var QRCreator = {
 		number: 2,
 		getData: function() {
 			var BCHPoly18_6 = 0x1F25;
-			var verData = this.number << log2(BCHPoly18_6);
-			var BCHData = binModulo(verData, BCHPoly18_6);
+			var verData = this.number << BinMath.log(BCHPoly18_6);
+			var BCHData = BinMath.modulo(verData, BCHPoly18_6);
 			return verData | BCHData;
 		}
 	},
@@ -882,8 +974,8 @@ var QRCreator = {
 		error: 0,
 		getData: function() {
 			var BCHPoly15_5 = 0x537;
-			var infoData = ((this.getECBitSequence()<<3) | this.mask ) << log2(BCHPoly15_5);
-			var BCHData = binModulo(infoData, BCHPoly15_5);
+			var infoData = ((this.getECBitSequence()<<3) | this.mask ) << BinMath.log(BCHPoly15_5);
+			var BCHData = BinMath.modulo(infoData, BCHPoly15_5);
 			var unmaskedData = infoData | BCHData;
 			var dataMask = 0x5412;
 			return unmaskedData ^ dataMask;
@@ -918,9 +1010,9 @@ var QRCreator = {
 	myQRDataEncoder: QRDataEncoder,
 	
 	// Modify data
-	setText: function(text, textMode) {
+	setText: function(text, textmode) {
 		this.myQRDataEncoder.text = text;
-		this.myQRDataEncoder.textMode = textMode;
+		this.myQRDataEncoder.textmode = textmode;
 	},
 	
 	setVersion: function(ver) {
@@ -938,7 +1030,6 @@ var QRCreator = {
 		this.setVersion(1);
 		this.setECLevel(0);
 		this.resetCanvas();
-		this.size = 6;
 		this.textData = null;
 		this.grid = null;
 		this.blockPos = null;
@@ -1091,8 +1182,13 @@ var QRCreator = {
 	},
 	
 	// main functions
-	setupCanvas: function(canvas) {
+	setupCanvas: function(canvas, size) {
 		this.canvas = canvas;
+		
+		if (size)
+		{
+			this.size = size;
+		}
 		this.resetCanvas();
 	},
 	resetCanvas: function() {
@@ -1107,8 +1203,12 @@ var QRCreator = {
 	},
 
 	initGrid: function(version) {
+		if (!version)
+		{
+			version = this.myQRDataEncoder.getMinimumVersionRequired();
+		}
 		// do not accept invalid versions
-		if (!version || version < 1 || version > 40)
+		if (version < 1 || version > 40)
 		{
 			return;
 		}
@@ -1243,45 +1343,48 @@ var QRCreator = {
 		                      // essentially sometimes the blocks don't fill up the entire grid, so do it in this function
 	},
 	
-	displayQR: function(drawFull) {
-		drawFull = (typeof drawFull == 'undefined' ?  true : drawFull);
+	displayQR: function(mask) {
+		this.createAndFillBlocks();
+		
+		mask = (typeof mask == 'undefined' ?  0 : mask); // todo: figure out ideal mask
+		this.maskGrid(mask);
 		
 		this.initStructure();
 		this.displayGrid();
-			
-		if (drawFull)
-			this.fillRemainder();
 	}
 }
 
 var QRUnitTests = 
 {
-	// TODO: at beginning of function, set up so assert will also say which function you're in
+	currentFunction: '',
+
 	assert: function(varName, actualValue, expectedValue) {
 		if (typeof(actualValue) != typeof(expectedValue))
 		{
-			alert('Value of '+varName+' has type '+typeof(actualValue)+'('+actualValue+'), expected '+typeof(expectedValue)+' ('+expectedValue+')');
+			alert(this.currentFunction+': Value of '+varName+' has type '+typeof(actualValue)+'('+actualValue+'), expected '+typeof(expectedValue)+' ('+expectedValue+')');
 		}
 		if (typeof(actualValue == 'object') &&
 			Object.prototype.toString.call(actualValue) != Object.prototype.toString.call(expectedValue))
 		{
-			alert('Value of '+varName+' has type '+Object.prototype.toString.call(actualValue)+'('+actualValue+'), expected '+Object.prototype.toString.call(expectedValue)+' ('+expectedValue+')');
+			alert(this.currentFunction+': Value of '+varName+' has type '+Object.prototype.toString.call(actualValue)+'('+actualValue+'), expected '+Object.prototype.toString.call(expectedValue)+' ('+expectedValue+')');
 		}
 		
 		if (Object.prototype.toString.call(actualValue) == '[object Array]')
 		{
 			if (!actualValue.compare(expectedValue))
 			{
-				alert('Value of '+varName+' is '+actualValue+', expected '+expectedValue);
+				alert(this.currentFunction+': Value of '+varName+' is '+actualValue+', expected '+expectedValue);
 			}
 		}
 		else if (actualValue != expectedValue)
 		{
-			alert('Value of '+varName+' is '+actualValue+', expected '+expectedValue);
+			alert(this.currentFunction+': Value of '+varName+' is '+actualValue+', expected '+expectedValue);
 		}
 	},
 	
 	GF256Values: function() {
+		this.currentFunction = 'GF256Values';
+		
 		var a = new GF256Value(142);
 		this.assert('a', a.getInteger(), 142);
 		this.assert('exponent of a', a.getExponent(), 254);
@@ -1314,6 +1417,8 @@ var QRUnitTests =
 	},
 	
 	GF256Poly: function() {
+		this.currentFunction = 'GF256Poly';
+		
 		var p = new GF256Poly();
 		p.set([new GF256Value(0, 1), 1]);
 		this.assert('p', p.toString(), 'x + 1');
@@ -1372,30 +1477,38 @@ var QRUnitTests =
 	},
 		
 	EncodeNumText: function() {
+		this.currentFunction = 'EncodeNumText';
+		
 		QRDataEncoder.text = "0123456789012345";
-		QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_NUM;
+		QRDataEncoder.textmode = QRDataEncoder.TEXTMODE_NUM;
 		QRDataEncoder.encode();
 		this.assert('QRDataEncoder.dataBits (num)', QRDataEncoder.dataBits, ['0001','0000010000','0000001100','0101011001','1010100110','1110000101','0011101010','0101']);
 	},
 
 	EncodeAlnumText: function() {
+		this.currentFunction = 'EncodeAlnumText';
+		
 		QRDataEncoder.text = "AC-42";
-		QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
+		QRDataEncoder.textmode = QRDataEncoder.TEXTMODE_ALNUM;
 		QRDataEncoder.encode();
 		this.assert('QRDataEncoder.dataBits (alnum)', QRDataEncoder.dataBits, ['0010','000000101','00111001110','11100111001','000010']);
 	},
 	
 	FormatData: function() {
+		this.currentFunction = 'FormatData';
+		
 		QRCreator.format.mask = 4;
 		QRCreator.format.error = 0;
 		this.assert('Format for mask 4, EC L', QRCreator.format.getData(), parseInt("110011000101111", 2));
 	},
 	
 	DataBits: function() {
+		this.currentFunction = 'DataBits';
+		
 		QRDataEncoder.version = 1;
 		QRDataEncoder.ECLevel = 2;
 		QRDataEncoder.text = "HELLO WORLD"
-		QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
+		QRDataEncoder.textmode = QRDataEncoder.TEXTMODE_ALNUM;
 		QRDataEncoder.dataCodewords = null;
 		QRDataEncoder.createDataCodewords();
 		//alert(QRDataEncoder.dataBits);
@@ -1404,13 +1517,15 @@ var QRUnitTests =
 		
 		// TODO: try these, I they're max length for version 2-L
 		//QRDataEncoder.text = "01234567890123456789012345678901234567890123456789012345678901234567890123456";
-		//QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_NUM;
+		//QRDataEncoder.textmode = QRDataEncoder.TEXTMODE_NUM;
 
 		//QRDataEncoder.text = "01234567890123456789012345678901234567890123456";
-		//QRDataEncoder.textMode = QRDataEncoder.TEXTMODE_ALNUM;
+		//QRDataEncoder.textmode = QRDataEncoder.TEXTMODE_ALNUM;
 	},
 	
 	ErrorCorrection: function() {
+		this.currentFunction = 'ErrorCorrection';
+		
 		QRDataEncoder.version = 2;
 		QRDataEncoder.ECLevel = 0;
 		QRDataEncoder.dataCodewords = [32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17];
@@ -1423,12 +1538,29 @@ var QRUnitTests =
 		this.assert('error polynomial', QRDataEncoder.errorMessage.toString(), '196x^9 + 35x^8 + 39x^7 + 119x^6 + 235x^5 + 215x^4 + 231x^3 + 226x^2 + 93x + 23');
 		this.assert('error codewords', QRDataEncoder.errorCodewords.toString(), '196,35,39,119,235,215,231,226,93,23');
 	},
+	
+	MinimumVersionRequired: function() {
+		this.currentFunction = 'MinimumVersionRequired';
+		
+		QRDataEncoder.ECLevel = 2;
+		QRDataEncoder.textmode = QRDataEncoder.TEXTMODE_NUM;
+		QRDataEncoder.text = '1234567890123456789012345678901234567890123456789'; // 49 chars
+		this.assert('num minimum version', QRDataEncoder.getMinimumVersionRequired(), 3);
+		
+		QRDataEncoder.ECLevel = 3;
+		QRDataEncoder.textmode = QRDataEncoder.TEXTMODE_ALNUM;
+		QRDataEncoder.text = '1234567890123456789012345678901234567890'; // 40 chars
+		this.assert('alnum minimum version', QRDataEncoder.getMinimumVersionRequired(), 4);
+		
+		QRDataEncoder.ECLevel = 1;
+		QRDataEncoder.textmode = QRDataEncoder.TEXTMODE_BYTE;
+		QRDataEncoder.text = '1234567890123456789012345678901234567890123456789'; // 49 chars
+		this.assert('byte minimum version', QRDataEncoder.getMinimumVersionRequired(), 4);
+	},
 
 	// TODO: more unit tests
 	
 	RunAllUnitTests: function() {
-		GF256.init();
-
 		QRUnitTests.GF256Values();
 		QRUnitTests.GF256Poly();
 		QRUnitTests.EncodeNumText();
@@ -1436,6 +1568,7 @@ var QRUnitTests =
 		QRUnitTests.FormatData();
 		QRUnitTests.DataBits();
 		QRUnitTests.ErrorCorrection();
+		QRUnitTests.MinimumVersionRequired();
 	}
 }
 
@@ -1444,38 +1577,24 @@ var QRUnitTests =
 // STEP 0: set up your drawing area
 QRCreator.setupCanvas(document.getElementById("QR"));
 
-// TODO: rearrange these steps as follows:
-//   STEP 1:
-//     set text+text mode
-//     set EC level
-//   STEP 2:
-//     based on the above, init grid based on the minimum size necessary (or override if desired)
-//   STEP 3:
-//     add blocks
-//   etc.
-
-// STEP 1: initialize the grid. Note that version must be set
-QRCreator.initGrid(1);
-
-// STEP 2: set up error correction level (and other settings?)
-QRCreator.setECLevel(0);
-
-// STEP 3: set up the text and specify text mode/encoding
+// STEP 1: set up the text and specify text mode/encoding
 QRCreator.setText("HELLO WORLD", QRDataEncoder.TEXTMODE_ALNUM);
 
-// TODO: setting EC level could be either part of setText or createAndFillBlocks()
+// STEP 2: set up error correction level
+QRCreator.setECLevel(0);
 
-// STEP 4: Fill the data in the QR class
-QRCreator.createAndFillBlocks();
+// STEP 3: initialize the grid. Note that if version is not set, then it will select the smallest QR version required
+//   TODO: If version is set but is too small, it should fail gracefully by chopping off text at the end
+QRCreator.initGrid(1);
 
-// STEP 5: mask the data
-QRCreator.maskGrid(7);
-// TODO: this should take in an optional parameter -- choose mask. if not provided, figure out which mask is the most ideal. there's a thingy on this to decide what's best
-// TODO: really, this should be an optional function and displayQR should do it if not provided
+// STEP 4: Make it visible!
+//   The mask is an optional parameter. If not, the QR generator will choose a suitable mask (TODO: choose best mask instead of default to 0. there's a scoring system)
+QRCreator.displayQR(7);
 
-// STEP 6: Make it visible!
-QRCreator.displayQR();
-
+// TODO: Really, this could also be done as a function: displayQR(text, textmode, eclevel, [opt] version, [opt] mask); not sure what's better
+//       It would lose flexibility as far as mixed modes would go, though.
+//         That could be fixed with addText(text, mode) and clearText() as part of reset()
+//         And then we now have displayQR(eclevel, [opt] version, [opt] mask)
 
 // NOTE: below is the fun stuff for making timestamp QR codes.
 testmask = 0;
@@ -1483,12 +1602,10 @@ function test()
 {
 	QRCreator.reset();
 	QRCreator.setECLevel(0);
-	QRCreator.initGrid(4);
 	QRCreator.setText((new Date()).toString(), QRDataEncoder.TEXTMODE_BYTE);
-	QRCreator.createAndFillBlocks();
-	QRCreator.maskGrid(testmask%8);
+	QRCreator.initGrid();
+	QRCreator.displayQR(testmask%8);
 	testmask++;
-	QRCreator.displayQR();
 }
 
 // Unit tests are run here!
@@ -1496,6 +1613,6 @@ QRUnitTests.RunAllUnitTests();
 
 </script>
 <br/>
-<button onClick="test(); setInterval(test,500)">Test</button>
+<button onClick="test(); setInterval(test,250)">Test</button>
 </body>
 </html>
