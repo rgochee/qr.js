@@ -1046,15 +1046,21 @@ var QRCreator = {
 		return 17+4*this.version.number;
 	},
 	
+	//
 	// drawing functions
+	//
+	
+	// Colors in a module in the grid
 	colorModule: function(x,y) {
 		//this.canvas.getContext("2d").fillRect((x+4)*this.size, (y+4)*this.size, this.size, this.size);
 		this.grid[x+4][y+4] = 1;
 	},
+	// Erases a module from the grid
 	eraseModule: function(x,y) {
 		//this.canvas.getContext("2d").clearRect((x+4)*this.size, (y+4)*this.size, this.size, this.size);
 		this.grid[x+4][y+4] = 0;
 	},
+	// Colors or erases a module in the grid according to fill (1/0)
 	drawModule: function(x,y, fill) {
 		if (fill) {
 			this.colorModule(x,y);
@@ -1062,6 +1068,7 @@ var QRCreator = {
 			this.eraseModule(x,y);
 		}
 	},
+	// Colors or erases a square with specified size in the grid with top left corner at (x,y)
 	drawSquare: function(x, y, size, fill) {
 		for (var i = 0; i < size; ++i) {
 			for (var j = 0; j < size; ++j) {
@@ -1073,6 +1080,8 @@ var QRCreator = {
 			}
 		}
 	},
+	// draws a line of alternating modules with specified length starting at (x,y) and moving in the specified direction
+	//   dir: 'r': right (or 'h': horizontal) and 'd': down (or 'v': vertical)
 	drawAlternating: function(x, y, dir, len) {
 		for (var i = 0; i < len; ++i) {	
 			if (dir == "r" || dir == "h") {
@@ -1092,9 +1101,8 @@ var QRCreator = {
 		}
 	},
 	
-	// bigger entities
-	
 	// adding data
+	
 	addBlock: function(block) {
 		if (this.blockPos[0] < 0) {
 			return;
@@ -1125,7 +1133,7 @@ var QRCreator = {
 		}
 	},
 	
-	// helper function to the above ensure proper placement of data blocks
+	// helper function for the above ensure proper placement of data blocks
 	incrementBlockPos: function() {
 		function moveBlockPosLeft(parent) {
 			parent.blockPos[0]-=2;
@@ -1255,16 +1263,179 @@ var QRCreator = {
 	},
 	
 	maskGrid: function(mask) {
-		this.format.mask = (typeof mask == 'undefined' ?  this.format.mask : mask);
+		this.format.mask = (typeof mask == 'undefined' ?  this.selectMask() : mask);
 		for (var i = 0; i < this.getWidth(); ++i) {
 			for (var j = 0; j < this.getWidth(); ++j) {
-				// this.format.mask=7;
 				this.grid[j+4][i+4] ^= this.format.shouldMask(i,j);
 			}
 		}
 		
 		// reinit the structure because it shouldn't be masked.
 		this.initStructure();
+	},
+	
+	selectMask: function() {
+		var minScore = 100000;
+		var bestMask = -1;
+		for (var i = 0; i < 8; ++i)
+		{
+			// we need to reset the grid each time we do the mask
+			this.initGrid(this.version.number);
+			this.createAndFillBlocks();
+			
+			// now mask and score
+			this.maskGrid(i);
+			var score = this.scoreQR();
+			if (score < minScore)
+			{
+				minScore = score;
+				bestMask = i;
+			}
+		}
+		return bestMask;
+	},
+	
+	scoreQR: function() {
+		// score 1
+		var score1 = 0;
+		
+		//horizontal
+		for (var i = 0; i < this.getWidth(); ++i) {
+			for (var j = 0; j < this.getWidth(); ++j) {
+				var color = this.grid[i+4][j+4];
+				var k;
+				for (k = 1; k < this.getWidth() - j; ++k)
+				{
+					if (this.grid[i+4][j+4+k] != color)
+					{
+						break;
+					}
+				}
+				if (k >= 5)
+				{
+					score1 += 3 + k-5;
+					j += k-5;
+				}
+			}
+		}
+		//vertical
+		for (var i = 0; i < this.getWidth(); ++i) {
+			for (var j = 0; j < this.getWidth(); ++j) {
+				var color = this.grid[i+4][j+4];
+				var k;
+				for (k = 1; k < this.getWidth() - j; ++k)
+				{
+					if (this.grid[j+4+k][i+4] != color)
+					{
+						break;
+					}
+				}
+				if (k >= 5)
+				{
+					countScore1 = 3 + k-5;
+					j += k-5;
+				}
+			}
+		}
+		
+		//score2
+		var score2 = 0;
+		for (var i = 0; i < this.getWidth()-1; ++i) {
+			for (var j = 0; j < this.getWidth()-1; ++j) {
+				var color = this.grid[i+4][j+4];
+				if (this.grid[i+4+1][j+4  ] != color ||
+					this.grid[i+4  ][j+4+1] != color ||
+					this.grid[i+4+1][j+4+1] != color )
+				{
+					continue;
+				}
+				score2 += 3;
+			}
+		}
+		
+		//score3
+		var score3 = 0;
+		for (var i = 0; i < this.getWidth()-10; ++i) {
+			for (var j = 0; j < this.getWidth()-10; ++j) {
+				if (this.grid[i+4][j+4   ] == 0 &&
+					this.grid[i+4][j+4+1 ] == 0 &&
+					this.grid[i+4][j+4+2 ] == 0 &&
+					this.grid[i+4][j+4+3 ] == 0 &&
+					this.grid[i+4][j+4+4 ] == 1 &&
+					this.grid[i+4][j+4+5 ] == 0 &&
+					this.grid[i+4][j+4+6 ] == 1 &&
+					this.grid[i+4][j+4+7 ] == 1 &&
+					this.grid[i+4][j+4+8 ] == 1 &&
+					this.grid[i+4][j+4+9 ] == 0 &&
+					this.grid[i+4][j+4+10] == 1 )
+				{
+					score3 += 40;
+				}
+				if (this.grid[i+4][j+4   ] == 1 &&
+					this.grid[i+4][j+4+1 ] == 0 &&
+					this.grid[i+4][j+4+2 ] == 1 &&
+					this.grid[i+4][j+4+3 ] == 1 &&
+					this.grid[i+4][j+4+4 ] == 1 &&
+					this.grid[i+4][j+4+5 ] == 0 &&
+					this.grid[i+4][j+4+6 ] == 1 &&
+					this.grid[i+4][j+4+7 ] == 0 &&
+					this.grid[i+4][j+4+8 ] == 0 &&
+					this.grid[i+4][j+4+9 ] == 0 &&
+					this.grid[i+4][j+4+10] == 0 )
+				{
+					score3 += 40;
+				}
+				if (this.grid[i+4   ][j+4] == 0 &&
+					this.grid[i+4+1 ][j+4] == 0 &&
+					this.grid[i+4+2 ][j+4] == 0 &&
+					this.grid[i+4+3 ][j+4] == 0 &&
+					this.grid[i+4+4 ][j+4] == 1 &&
+					this.grid[i+4+5 ][j+4] == 0 &&
+					this.grid[i+4+6 ][j+4] == 1 &&
+					this.grid[i+4+7 ][j+4] == 1 &&
+					this.grid[i+4+8 ][j+4] == 1 &&
+					this.grid[i+4+9 ][j+4] == 0 &&
+					this.grid[i+4+10][j+4] == 1 )
+				{
+					score3 += 40;
+				}
+				if (this.grid[i+4   ][j+4] == 1 &&
+					this.grid[i+4+1 ][j+4] == 0 &&
+					this.grid[i+4+2 ][j+4] == 1 &&
+					this.grid[i+4+3 ][j+4] == 1 &&
+					this.grid[i+4+4 ][j+4] == 1 &&
+					this.grid[i+4+5 ][j+4] == 0 &&
+					this.grid[i+4+6 ][j+4] == 1 &&
+					this.grid[i+4+7 ][j+4] == 0 &&
+					this.grid[i+4+8 ][j+4] == 0 &&
+					this.grid[i+4+9 ][j+4] == 0 &&
+					this.grid[i+4+10][j+4] == 0 )
+				{
+					score3 += 40;
+				}
+			}
+		}
+		
+		//score4
+		var score4 = 0;
+		var countBlack = 0;
+		for (var i = 0; i < this.getWidth()-1; ++i) {
+			for (var j = 0; j < this.getWidth()-1; ++j) {
+				if (this.grid[i+4][j+4] == 1)
+				{
+					countBlack++;
+				}
+			}
+		}
+		var percent = (countBlack * 100) / (this.getWidth() * this.getWidth())
+		var prev5 = Math.floor(percent / 20);
+		var next5 = prev5 + 1;
+		prev5 = Math.abs(prev5-10);
+		next5 = Math.abs(next5-10);
+		score4 = Math.min(prev5,next5)*10;
+		
+		// TODO: move subscores into individual functions and do unit tests
+		return score1+score2+score3+score4;
 	},
 	
 	drawPatterns: function() {
@@ -1590,20 +1761,23 @@ var QRUnitTests =
 
 // now let's start to draw!
 
-// STEP 0: set up your drawing area
+// STEP 0: set up your drawing area (needs to be done only once)
 QRCreator.setupCanvas(document.getElementById("QR"));
 
 // STEP 1: set up the text and specify text mode/encoding
 QRCreator.addText("HELLO WORLD", QRDataEncoder.TEXTMODE_ALNUM);
-
 // STEP 2: Make it visible!
 //   displayQR has 3 parameters, the latter two are optional.
 //     -EClevel       - error correction level
 //     -version [opt] - Version (size). if unspecified or 0, the QR generator will choose the minimum version required for the given text
 //     -mask    [opt] - QR mask. if unspecified, the QR generator will choose a suitable mask
-QRCreator.displayQR(0, 1, 7);
+QRCreator.displayQR(0);
+
 //   TODO: If version is set but is too small, it should fail gracefully by chopping off text at the end
-//   TODO: choose best mask instead of default to 0. there's a scoring system for this.
+
+// Optional steps:
+// One can use QRCreator.reset() and go back to step 1 to create other QR codes.
+// Step 0 only needs to be done to change the canvas.
 
 
 // NOTE: below is the fun stuff for making timestamp QR codes.
