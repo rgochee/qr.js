@@ -753,6 +753,47 @@ var QRDataEncoder = {
 		return 0;
 	},
 	
+	maxCharactersAllowed: function(version, ECLevel) {
+		var totalBits = this.numDataCodewords(version, ECLevel)*8; // data blocks -> bits
+		totalBits -= 4; // subtract encoding bits
+		totalBits -= this.numCountBits(version); // subtract character count bits
+
+		if (this.textmode == this.TEXTMODE_NUM)
+		{
+			var numChars = Math.floor(totalBits / 10)*3;
+			if (totalBits % 10 >= 7)
+			{
+				numChars++;
+			}
+			if (totalBits % 10 >= 4)
+			{
+				numChars++;
+			}
+			return numChars;
+		}
+		else if (this.textmode == this.TEXTMODE_ALNUM)
+		{
+			var numChars = Math.floor(totalBits / 11)*2;
+			if (totalBits % 11 >= 6)
+			{
+				numChars++;
+			}
+			return numChars;
+		}
+		else if (this.textmode == this.TEXTMODE_BYTE)
+		{
+			return Math.floor(totalBits / 8);
+		}
+		else if (this.textmode == this.TEXTMODE_KANJI)
+		{
+			return Math.floor(totalBits / 13);
+		}
+		else
+		{
+			return 0;
+		}
+	},
+	
 	zeroPadBitsBase2: function(num, length) {
 		// assumes that no input will be more than 16 bits
 		return ("0000000000000000" + num.toString(2)).slice(-length);
@@ -805,7 +846,13 @@ var QRDataEncoder = {
 	},
 	
 	encodeData: function() {
-		// TODO: I think there's a problem if the text is supersuper tiny. check it
+		// first, chip off the text if it's too long.
+		var maxChars = this.maxCharactersAllowed();
+		if (maxChars < this.text.length)
+		{
+			this.text = this.text.substring(0,maxChars);
+		}
+		
 		if (this.textmode == this.TEXTMODE_NUM) {
 			var i = 0;
 			this.data = [this.TEXTMODE_NUM, this.text.length];
@@ -1765,13 +1812,15 @@ var QRUnitTests =
 QRCreator.setupCanvas(document.getElementById("QR"));
 
 // STEP 1: set up the text and specify text mode/encoding
-QRCreator.addText("HELLO WORLD", QRDataEncoder.TEXTMODE_ALNUM);
+//QRCreator.addText("HELLO WORLD", QRDataEncoder.TEXTMODE_ALNUM);
+//QRCreator.addText("1234567890123456789012345678901234567890", QRDataEncoder.TEXTMODE_ALNUM);
+QRCreator.addText("12345678901234567890123456", QRDataEncoder.TEXTMODE_ALNUM);
 // STEP 2: Make it visible!
 //   displayQR has 3 parameters, the latter two are optional.
 //     -EClevel       - error correction level
 //     -version [opt] - Version (size). if unspecified or 0, the QR generator will choose the minimum version required for the given text
 //     -mask    [opt] - QR mask. if unspecified, the QR generator will choose a suitable mask
-QRCreator.displayQR(0);
+QRCreator.displayQR(0, 1, 6);
 
 //   TODO: If version is set but is too small, it should fail gracefully by chopping off text at the end
 
@@ -1791,7 +1840,7 @@ function test()
 }
 
 // Unit tests are run here!
-QRUnitTests.RunAllUnitTests();
+//QRUnitTests.RunAllUnitTests();
 
 </script>
 <br/>
