@@ -9,7 +9,8 @@ Your browser does not support the HTML5 canvas tag.
 </canvas>
 <script>
 
-// start external code (deep array compare)
+// start external code 
+// deep array compare
 // attach the .compare method to Array's prototype to call it on any array
 Array.prototype.compare = function (array) {
     // if the other array is a falsy value, return
@@ -33,6 +34,45 @@ Array.prototype.compare = function (array) {
         }
     }
     return true;
+}
+
+// nice way to clone objects
+function clone(obj) {
+    // Handle the 3 simple types, and null or undefined
+    if (null == obj || "object" != typeof obj) return obj;
+
+    // Handle Date
+    if (obj instanceof Date) {
+        var copy = new Date();
+        copy.setTime(obj.getTime());
+        return copy;
+    }
+
+    // Handle Array
+    if (obj instanceof Array) {
+        var copy = [];
+        for (var i = 0, len = obj.length; i < len; i++) {
+            copy[i] = clone(obj[i]);
+        }
+        return copy;
+    }
+	/*
+    // Handle Object
+    if (obj instanceof Object) {
+        var copy = {};
+        for (var attr in obj) {
+            if (obj.hasOwnProperty(attr)) copy[attr] = clone(obj[attr]);
+        }
+        return copy;
+    }
+
+    throw new Error("Unable to copy obj! Its type isn't supported.");
+	*/
+	newobj = Object.create(Object.getPrototypeOf(obj));
+	for (var prop in obj) {
+		newobj[prop] = obj[prop];
+	}
+	return newobj;
 }
 // end external code
 
@@ -654,7 +694,7 @@ var QRDataEncoder = {
 	
 	/*
 	// Returns the number of required error blocks for the specified QR code version+level
-	numErrorBlocks: function() {
+	numErrorBlocks2: function() {
 		var dataECBlocks = [[]
 							,[[ 1   ], [ 1   ], [ 1   ], [ 1   ]] //1
 							,[[ 1   ], [ 1   ], [ 1   ], [ 1   ]] //2
@@ -701,7 +741,7 @@ var QRDataEncoder = {
 	},*/
 	
 	// Returns the number of required error correction blocks for the specified QR code version+level
-	numErrorBlocks2: function() {
+	numErrorBlocks: function() {
 		var dataECBlocks = [[]
 							,[1, 1, 1, 1] //1
 							,[1, 1, 1, 1] //2
@@ -747,8 +787,8 @@ var QRDataEncoder = {
 		return dataECBlocks[this.version][this.ECLevel]
 	},
 	
-	numDataBlocks2: function() {
-		var numBlocks = this.numErrorBlocks2();
+	numDataBlocks: function() {
+		var numBlocks = this.numErrorBlocks();
 		var numDataCodewordsTotal = this.numDataCodewords();
 		
 		var numDataCodewordsGroup1 = Math.floor(numDataCodewordsTotal / numBlocks);
@@ -764,55 +804,6 @@ var QRDataEncoder = {
 		}
 		
 		return [[numBlocksGroup1, numDataCodewordsGroup1], [numBlocksGroup2, numDataCodewordsGroup2]];
-	},
-	
-	// Returns the number of and size of the error correction blocks for the specified QR code version+level
-	// TODO: a lot.
-	numDataBlocks: function() {
-		var dataBlocks = [[]
-							,[1, 1, 1, 1] //1
-							,[1, 1, 1, 1] //2
-							,[1, 1, 2, 2] //3
-							,[1, 2, 2, 4] //4
-							// todo: multigroup
-							,[1, 2, 2, 2] //5
-							,[136, 108, 76, 60] //6
-							,[156, 124, 88, 66] //7
-							,[194, 154, 110, 86] //8
-							,[232, 182, 132, 100] //9
-							,[274, 216, 154, 122] //10
-							,[324, 254, 180, 140] //11
-							,[370, 290, 206, 158] //12
-							,[428, 334, 244, 180] //13
-							,[461, 365, 261, 197] //14
-							,[523, 415, 295, 223] //15
-							,[589, 453, 325, 253] //16
-							,[647, 507, 367, 283] //17
-							,[721, 563, 397, 313] //18
-							,[795, 627, 445, 341] //19
-							,[861, 669, 485, 385] //20
-							,[932, 714, 512, 406] //21
-							,[1006, 782, 568, 442] //22
-							,[1094, 860, 614, 464] //23
-							,[1174, 914, 664, 514] //24
-							,[1276, 1000, 718, 536] //25
-							,[1370, 1062, 754, 596] //26
-							,[1468, 1128, 808, 628] //27
-							,[1531, 1193, 871, 661] //28
-							,[1631, 1267, 911, 701] //29
-							,[1735, 1373, 985, 745] //30
-							,[1843, 1455, 1033, 793] //31
-							,[1955, 1541, 1115, 845] //32
-							,[2071, 1631, 9171, 901] //33
-							,[2191, 1725, 1231, 961] //34
-							,[2306, 1812, 1286, 986] //35
-							,[2434, 1914, 1354, 1054] //36
-							,[2566, 1922, 1426, 1096] //37
-							,[2702, 2102, 1502, 1142] //38
-							,[2812, 2216, 1582, 1222] //39
-							,[2956, 2334, 1666, 1276] //40 
-							];
-		return dataBlocks[this.version][this.ECLevel]
 	},
 	
 	// Calculates minimum version requried given text encoding and error correction level
@@ -1037,28 +1028,58 @@ var QRDataEncoder = {
 	
 	convertBitsToCodewords: function() {
 		var allDataBits = this.dataBits.join("");
-		this.dataCodewords = [];
+		this.dataCodewordsAll = [];
 		while (allDataBits.length > 8)
 		{
-			this.dataCodewords.push(parseInt(allDataBits.substring(0,8), 2));
+			this.dataCodewordsAll.push(parseInt(allDataBits.substring(0,8), 2));
 			allDataBits = allDataBits.substring(8);
 		}
 		if (allDataBits.length > 0)
 		{
 			allDataBits += "00000000";
-			this.dataCodewords.push(parseInt(allDataBits.substring(0,8), 2));
+			this.dataCodewordsAll.push(parseInt(allDataBits.substring(0,8), 2));
 		}
 		
 		var maxDataSize = this.numDataCodewords();
-		while (this.dataCodewords.length < maxDataSize)
+		while (this.dataCodewordsAll.length < maxDataSize)
 		{
-			this.dataCodewords.push(236);
-			this.dataCodewords.push(17);
+			this.dataCodewordsAll.push(236);
+			this.dataCodewordsAll.push(17);
 		}
 		
-		if (this.dataCodewords.length > maxDataSize)
+		if (this.dataCodewordsAll.length > maxDataSize)
 		{
-			this.dataCodewords.length = maxDataSize;
+			this.dataCodewordsAll.length = maxDataSize;
+		}
+	},
+	
+	interleaveDataCodewords: function() {
+		this.dataCodewords = [];
+		var codewordsTotal = 0;
+		var blocksTotal = 0;
+		var blockGroups = this.numDataBlocks();
+		for (var blockGroup = 0; blockGroup < blockGroups.length; ++blockGroup)
+		{
+			for (var block = 0; block < blockGroups[blockGroup][0]; ++block, ++blocksTotal)
+			{
+				this.dataCodewords[blocksTotal] = [];
+				for (var codeword = 0; codeword < blockGroups[blockGroup][1]; ++codeword, ++codewordsTotal)
+				{
+					this.dataCodewords[blocksTotal][codeword] = this.dataCodewordsAll[codewordsTotal];
+				}
+			}
+		}
+		
+		this.dataCodewordsInt = [];
+		for (var i = 0; i < blockGroups[0][1]+1; ++i) // HACKY
+		{
+			for (var j = 0; j < this.numErrorBlocks(); ++j)
+			{
+				if (this.dataCodewords[j][i])
+				{
+					this.dataCodewordsInt.push(this.dataCodewords[j][i]);
+				}
+			}
 		}
 	},
 	
@@ -1066,6 +1087,7 @@ var QRDataEncoder = {
 		this.encode();
 		this.finalizeDataBits();
 		this.convertBitsToCodewords();
+		this.interleaveDataCodewords();
 	},
 	
 	generateECGenerator: function() {
@@ -1078,33 +1100,72 @@ var QRDataEncoder = {
 	
 	generateMessagePolynomial: function() {
 		this.messages = [];
-		//for (var i = 0; i < this.numDataBlocks(); ++i)
-		var i = 0; // TODO: handle bigger block sizes
+		
+		var ECBlockGroups = this.numDataBlocks();
+		
+		var codewordsTotal = 0;
+		for (var blockGroup = 0; blockGroup < ECBlockGroups.length; ++blockGroup)
 		{
-			this.messages[i] = new GF256Poly();
-			for (var j = 0; j < this.dataCodewords.length; ++j)
+			for (var block = 0; block < ECBlockGroups[blockGroup][0]; ++block)
 			{
-				this.messages[i].set(new GF256Value(this.dataCodewords[this.dataCodewords.length-j-1]), j);
+				this.messages[block] = new GF256Poly();
+				for (var codeword = 0; codeword < ECBlockGroups[blockGroup][1]; ++codeword, ++codewordsTotal)
+				{
+					this.messages[block].set(new GF256Value(this.dataCodewordsAll[this.dataCodewordsAll.length-codewordsTotal-1]), codeword);
+				}
+			}
+		}
+		// assert( codewordsTotal == this.dataCodewordsAll.length );
+	},
+	
+	generateErrorPolynomial: function() {
+		this.errorCodewords = [];
+		for (var i = 0; i < this.messages.length; ++i)
+		{
+			this.errorMessage = clone(this.messages[i]); // TODO: handle bigger block sizes
+			this.errorMessage.multiply(new GF256Poly(1, this.ECGenerator.getMaxTerm()));
+			this.errorMessage.modulo(this.ECGenerator);
+			this.errorCodewordsAll = [];
+			this.errorCodewords[i] = [];
+		
+			for (var j = 0; j <= this.errorMessage.getMaxTerm(); ++j)
+			{
+				this.errorCodewordsAll.push(this.errorMessage.getCoeff(this.errorMessage.getMaxTerm()-j));
+				this.errorCodewords[i][j] = this.errorMessage.getCoeff(this.errorMessage.getMaxTerm()-j);
 			}
 		}
 	},
 	
-	generateErrorPolynomial: function() {
-		this.errorMessage = this.messages[0]; // TODO: handle bigger block sizes
-		this.errorMessage.multiply(new GF256Poly(1, this.ECGenerator.getMaxTerm()));
-		this.errorMessage.modulo(this.ECGenerator);
+	interleaveErrorCodewords: function() {/*
 		this.errorCodewords = [];
-
-		for (var i = 0; i <= this.errorMessage.getMaxTerm(); ++i)
+		var codewordsTotal = 0;
+		for (var block = 0; block < this.numErrorBlocks(); ++block)
 		{
-			this.errorCodewords[i] = this.errorMessage.getCoeff(this.errorMessage.getMaxTerm()-i);
+			this.errorCodewords[block] = [];
+			for (var codeword = 0; codeword < this.numErrorCodewords(); ++codeword, ++codewordsTotal)
+			{
+				this.errorCodewords[block][codeword] = this.errorCodewordsAll[codewordsTotal];
+			}
+		}*/
+		
+		//alert(this.errorCodewords);
+		//alert(this.errorCodewordsAll);
+		this.errorCodewordsInt = [];
+		for (var i = 0; i < this.numErrorCodewords(); ++i)
+		{
+			for (var j = 0; j < this.numErrorBlocks(); ++j)
+			{
+				this.errorCodewordsInt.push(this.errorCodewords[j][i]);
+			}
 		}
+		//alert(this.errorCodewordsInt);
 	},
 	
 	createErrorCodewords: function() {
 		this.generateECGenerator();
 		this.generateMessagePolynomial();
 		this.generateErrorPolynomial();
+		this.interleaveErrorCodewords();
 	}
 }
 
@@ -1311,7 +1372,7 @@ var QRCreator = {
 			} else {
 				this.blockPos[1]--;
 			}
-		} else {
+			} else {
 			// moving down!
 			if (this.blockPos[1] == this.getWidth()-1) {
 				// don't go too far down, let's move left and change directions
@@ -1452,6 +1513,11 @@ var QRCreator = {
 				bestMask = i;
 			}
 		}
+		
+		// since we messed with the grid, we gotta reset one last time TODO: this is hacky
+		this.initGrid(this.version.number);
+		this.createAndFillBlocks();
+			
 		return bestMask;
 	},
 	
@@ -1678,8 +1744,8 @@ var QRCreator = {
 	createAndFillBlocks: function() {
 		this.myQRDataEncoder.createDataCodewords();
 		this.myQRDataEncoder.createErrorCodewords();
-		this.addDataBlocks(this.myQRDataEncoder.dataCodewords);
-		this.addDataBlocks(this.myQRDataEncoder.errorCodewords);
+		this.addDataBlocks(this.myQRDataEncoder.dataCodewordsInt);
+		this.addDataBlocks(this.myQRDataEncoder.errorCodewordsInt);
 		this.fillRemainder();
 	},
 	
@@ -1882,7 +1948,7 @@ var QRUnitTests =
 		
 		QRDataEncoder.version = 2;
 		QRDataEncoder.ECLevel = 0;
-		QRDataEncoder.dataCodewords = [32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17];
+		QRDataEncoder.dataCodewordsAll = [32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17];
 		
 		QRDataEncoder.generateECGenerator();
 		this.assert('EC generator polynomial', QRDataEncoder.ECGenerator.toString(), 'x^10 + 216x^9 + 194x^8 + 159x^7 + 111x^6 + 199x^5 + 94x^4 + 95x^3 + 113x^2 + 157x + 193');
@@ -1890,22 +1956,22 @@ var QRUnitTests =
 		this.assert('message polynomial', QRDataEncoder.messages[0].toString(), '32x^15 + 91x^14 + 11x^13 + 120x^12 + 209x^11 + 114x^10 + 220x^9 + 77x^8 + 67x^7 + 64x^6 + 236x^5 + 17x^4 + 236x^3 + 17x^2 + 236x + 17');
 		QRDataEncoder.generateErrorPolynomial();
 		this.assert('error polynomial', QRDataEncoder.errorMessage.toString(), '196x^9 + 35x^8 + 39x^7 + 119x^6 + 235x^5 + 215x^4 + 231x^3 + 226x^2 + 93x + 23');
-		this.assert('error codewords', QRDataEncoder.errorCodewords.toString(), '196,35,39,119,235,215,231,226,93,23');
+		this.assert('error codewords', QRDataEncoder.errorCodewordsAll.toString(), '196,35,39,119,235,215,231,226,93,23');
 	},
 	
 	
 	ErrorCorrectionBlocks: function() {
 		QRDataEncoder.ECLevel = 2;
 		QRDataEncoder.version = 9;
-		this.assert('9-Q error blocks', QRDataEncoder.numDataBlocks2(), [[4,16],[4,17]]);
+		this.assert('9-Q error blocks', QRDataEncoder.numDataBlocks(), [[4,16],[4,17]]);
 		
 		QRDataEncoder.ECLevel = 3;
 		QRDataEncoder.version = 22;
-		this.assert('22-H error blocks', QRDataEncoder.numDataBlocks2(), [[34,13]]);
+		this.assert('22-H error blocks', QRDataEncoder.numDataBlocks(), [[34,13]]);
 		
 		QRDataEncoder.ECLevel = 1;
 		QRDataEncoder.version = 32;
-		this.assert('32-M error blocks', QRDataEncoder.numDataBlocks2(), [[10,46],[23,47]]);
+		this.assert('32-M error blocks', QRDataEncoder.numDataBlocks(), [[10,46],[23,47]]);
 	},
 	
 	MinimumVersionRequired: function() {
