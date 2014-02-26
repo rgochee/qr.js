@@ -1406,9 +1406,55 @@ var QRCreator = {
 		this.drawSquare(x+2,y+2,3,true);
 	},
 	drawAlignment: function(x,y) {
-		this.drawSquare(x, y, 5, true);
-		this.drawSquare(x+1, y+1, 3, false);
-		this.colorModule(x+2,y+2);
+		this.drawSquare(x-2, y-2, 5, true);
+		this.drawSquare(x-1, y-1, 3, false);
+		this.colorModule(x , y);
+	},
+	
+	drawAlignments: function() {
+		if (this.version.number == 1)
+		{
+			return;
+		}
+		
+		var differences = [0, 0, 0, 0, 0, 0, 0,        // 1-6
+		                   16, 18, 20, 22, 24, 26, 28, // 7-13
+						   20, 22, 24, 24, 26, 28, 28, // 14-20
+						   22, 24, 24, 26, 26, 28, 28, // 21-27
+						   24, 24, 26, 26, 26, 28, 28, // 28-34
+						   24, 26, 26, 26, 28, 28];    // 35-40
+						   
+		var maxNum = Math.floor(this.version.number / 7)+1;
+		
+		// versions 2-6
+		if (maxNum == 1) {
+			this.drawAlignment(this.getWidth()-7,this.getWidth()-7);
+		}
+		
+		for (var i = 0; i <= maxNum; ++i) {
+			for (var j = 0; j <= maxNum; ++j) {
+				if ((i == maxNum && j == maxNum) ||
+					(i == 0      && j == maxNum) ||
+					(i == maxNum && j == 0     ) )
+				{
+					continue;
+				}
+				
+				var x = this.getWidth()-7-differences[this.version.number]*i;
+				var y = this.getWidth()-7-differences[this.version.number]*j;
+				
+				if (i == maxNum)
+				{
+					x = 6;
+				}
+				if (j == maxNum)
+				{
+					y = 6;
+				}
+				
+				this.drawAlignment(x,y);
+			}
+		}
 	},
 	
 	clearQuietZone: function() {
@@ -1689,9 +1735,7 @@ var QRCreator = {
 		this.drawAlternating(6,8,"d",this.getWidth()-16);
 		
 		// alignment patterns
-		if (this.version.number > 1 && this.version.number <= 6) {
-			this.drawAlignment(this.getWidth()-9,this.getWidth()-9);
-		}
+		this.drawAlignments();
 		
 		// quiet zone
 		this.clearQuietZone();
