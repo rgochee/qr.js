@@ -4,7 +4,7 @@
 <title>QR</title>
 </head>
 <body>
-<canvas id="QR" width="250" height="250" style="border:1px solid black">
+<canvas id="QR" width="450" height="450" style="border:1px solid black">
 Your browser does not support the HTML5 canvas tag.
 </canvas>
 <script>
@@ -489,7 +489,7 @@ var QRDataEncoder = {
 	
 	// Returns the number of data bits for each code of a given string
 	numDataBits : function(count, textmode) {
-		if (!textmode)
+		if (typeof(textmode) == 'undefined')
 		{
 			textmode = this.textmode;
 		}
@@ -535,11 +535,11 @@ var QRDataEncoder = {
 	
 	// Returns the number of bits for the character count indicator
 	numCountBits : function(version, textmode) {
-		if (!version)
+		if (typeof(version) == 'undefined')
 		{
 			version = this.version;
 		}
-		if (!textmode)
+		if (typeof(textmode) == 'undefined')
 		{
 			textmode = this.textmode;
 		}
@@ -591,11 +591,11 @@ var QRDataEncoder = {
 	
 	// Returns the number of required data codewords for the specified QR code version+level
 	numDataCodewords: function(version, ECLevel) {
-		if (!version)
+		if (typeof(version) == 'undefined')
 		{
 			version = this.version;
 		}
-		if (!ECLevel)
+		if (typeof(ECLevel) == 'undefined')
 		{
 			ECLevel = this.ECLevel;
 		}
@@ -625,7 +625,7 @@ var QRDataEncoder = {
 							,[1006, 782, 568, 442] //22
 							,[1094, 860, 614, 464] //23
 							,[1174, 914, 664, 514] //24
-							,[1276, 1000, 718, 536] //25
+							,[1276, 1000, 718, 538] //25
 							,[1370, 1062, 754, 596] //26
 							,[1468, 1128, 808, 628] //27
 							,[1531, 1193, 871, 661] //28
@@ -633,11 +633,11 @@ var QRDataEncoder = {
 							,[1735, 1373, 985, 745] //30
 							,[1843, 1455, 1033, 793] //31
 							,[1955, 1541, 1115, 845] //32
-							,[2071, 1631, 9171, 901] //33
+							,[2071, 1631, 1171, 901] //33
 							,[2191, 1725, 1231, 961] //34
 							,[2306, 1812, 1286, 986] //35
 							,[2434, 1914, 1354, 1054] //36
-							,[2566, 1922, 1426, 1096] //37
+							,[2566, 1992, 1426, 1096] //37
 							,[2702, 2102, 1502, 1142] //38
 							,[2812, 2216, 1582, 1222] //39
 							,[2956, 2334, 1666, 1276] //40 
@@ -646,7 +646,16 @@ var QRDataEncoder = {
 	},
 	
 	// Returns the number of required error codewords per block for the specified QR code version+level
-	numErrorCodewords: function() {
+	numErrorCodewords: function(version, ECLevel) {
+		if (typeof(version) == 'undefined')
+		{
+			version = this.version;
+		}
+		if (typeof(ECLevel) == 'undefined')
+		{
+			ECLevel = this.ECLevel;
+		}
+		
 		var dataECCodewords = [[]
 							,[7, 10, 13, 17] //1
 							,[10, 16, 22, 28] //2
@@ -689,7 +698,7 @@ var QRDataEncoder = {
 							,[30, 28, 30, 30] //39
 							,[30, 28, 30, 30] //40
 							];
-		return dataECCodewords[this.version][this.ECLevel]
+		return dataECCodewords[version][ECLevel]
 	},
 	
 	/*
@@ -741,13 +750,22 @@ var QRDataEncoder = {
 	},*/
 	
 	// Returns the number of required error correction blocks for the specified QR code version+level
-	numErrorBlocks: function() {
+	numErrorBlocks: function(version, ECLevel) {
+		if (typeof(version) == 'undefined')
+		{
+			version = this.version;
+		}
+		if (typeof(ECLevel) == 'undefined')
+		{
+			ECLevel = this.ECLevel;
+		}
+		
 		var dataECBlocks = [[]
 							,[1, 1, 1, 1] //1
 							,[1, 1, 1, 1] //2
 							,[1, 1, 2, 2] //3
 							,[1, 2, 2, 4] //4
-							,[1, 2, 2, 2] //5
+							,[1, 2, 4, 4] //5
 							,[2, 4, 4, 4] //6
 							,[2, 4, 6, 5] //7
 							,[2, 4, 6, 6] //8
@@ -777,19 +795,28 @@ var QRDataEncoder = {
 							,[17, 33, 45, 54] //32
 							,[18, 35, 48, 57] //33
 							,[19, 37, 51, 60] //34
-							,[19, 38, 63, 63] //35
+							,[19, 38, 53, 63] //35
 							,[20, 40, 56, 66] //36
 							,[21, 43, 59, 70] //37
 							,[22, 45, 62, 74] //38
 							,[24, 47, 65, 77] //39
 							,[25, 49, 68, 81] //40
 							];
-		return dataECBlocks[this.version][this.ECLevel]
+		return dataECBlocks[version][ECLevel]
 	},
 	
-	numDataBlocks: function() {
-		var numBlocks = this.numErrorBlocks();
-		var numDataCodewordsTotal = this.numDataCodewords();
+	numDataBlocks: function(version, ECLevel) {
+		if (typeof(version) == 'undefined')
+		{
+			version = this.version;
+		}
+		if (typeof(ECLevel) == 'undefined')
+		{
+			ECLevel = this.ECLevel;
+		}
+		
+		var numBlocks = this.numErrorBlocks(version, ECLevel);
+		var numDataCodewordsTotal = this.numDataCodewords(version, ECLevel);
 		
 		var numDataCodewordsGroup1 = Math.floor(numDataCodewordsTotal / numBlocks);
 		var numDataCodewordsGroup2 = numDataCodewordsGroup1 + 1;
@@ -1104,14 +1131,15 @@ var QRDataEncoder = {
 		var ECBlockGroups = this.numDataBlocks();
 		
 		var codewordsTotal = 0;
+		var blockTotal = 0;
 		for (var blockGroup = 0; blockGroup < ECBlockGroups.length; ++blockGroup)
 		{
-			for (var block = 0; block < ECBlockGroups[blockGroup][0]; ++block)
+			for (var block = 0; block < ECBlockGroups[blockGroup][0]; ++block, ++blockTotal)
 			{
-				this.messages[block] = new GF256Poly();
+				this.messages[blockTotal] = new GF256Poly();
 				for (var codeword = 0; codeword < ECBlockGroups[blockGroup][1]; ++codeword, ++codewordsTotal)
 				{
-					this.messages[block].set(new GF256Value(this.dataCodewordsAll[this.dataCodewordsAll.length-codewordsTotal-1]), codeword);
+					this.messages[blockTotal].set(new GF256Value(this.dataCodewords[blockTotal][this.dataCodewords[blockTotal].length-codeword-1]), codeword);
 				}
 			}
 		}
@@ -1120,12 +1148,12 @@ var QRDataEncoder = {
 	
 	generateErrorPolynomial: function() {
 		this.errorCodewords = [];
+		this.errorCodewordsAll = [];
 		for (var i = 0; i < this.messages.length; ++i)
 		{
 			this.errorMessage = clone(this.messages[i]); // TODO: handle bigger block sizes
 			this.errorMessage.multiply(new GF256Poly(1, this.ECGenerator.getMaxTerm()));
 			this.errorMessage.modulo(this.ECGenerator);
-			this.errorCodewordsAll = [];
 			this.errorCodewords[i] = [];
 		
 			for (var j = 0; j <= this.errorMessage.getMaxTerm(); ++j)
@@ -1136,20 +1164,7 @@ var QRDataEncoder = {
 		}
 	},
 	
-	interleaveErrorCodewords: function() {/*
-		this.errorCodewords = [];
-		var codewordsTotal = 0;
-		for (var block = 0; block < this.numErrorBlocks(); ++block)
-		{
-			this.errorCodewords[block] = [];
-			for (var codeword = 0; codeword < this.numErrorCodewords(); ++codeword, ++codewordsTotal)
-			{
-				this.errorCodewords[block][codeword] = this.errorCodewordsAll[codewordsTotal];
-			}
-		}*/
-		
-		//alert(this.errorCodewords);
-		//alert(this.errorCodewordsAll);
+	interleaveErrorCodewords: function() {
 		this.errorCodewordsInt = [];
 		for (var i = 0; i < this.numErrorCodewords(); ++i)
 		{
@@ -1158,7 +1173,6 @@ var QRDataEncoder = {
 				this.errorCodewordsInt.push(this.errorCodewords[j][i]);
 			}
 		}
-		//alert(this.errorCodewordsInt);
 	},
 	
 	createErrorCodewords: function() {
@@ -1949,6 +1963,7 @@ var QRUnitTests =
 		QRDataEncoder.version = 2;
 		QRDataEncoder.ECLevel = 0;
 		QRDataEncoder.dataCodewordsAll = [32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17];
+		QRDataEncoder.dataCodewords = [QRDataEncoder.dataCodewordsAll];
 		
 		QRDataEncoder.generateECGenerator();
 		this.assert('EC generator polynomial', QRDataEncoder.ECGenerator.toString(), 'x^10 + 216x^9 + 194x^8 + 159x^7 + 111x^6 + 199x^5 + 94x^4 + 95x^3 + 113x^2 + 157x + 193');
@@ -1959,8 +1974,31 @@ var QRUnitTests =
 		this.assert('error codewords', QRDataEncoder.errorCodewordsAll.toString(), '196,35,39,119,235,215,231,226,93,23');
 	},
 	
-	
 	ErrorCorrectionBlocks: function() {
+		QRDataEncoder.ECLevel = 2;
+		QRDataEncoder.version = 9;
+		this.assert('9-Q error blocks', QRDataEncoder.numDataBlocks(), [[4,16],[4,17]]);
+		
+		QRDataEncoder.ECLevel = 3;
+		QRDataEncoder.version = 22;
+		this.assert('22-H error blocks', QRDataEncoder.numDataBlocks(), [[34,13]]);
+		
+		QRDataEncoder.ECLevel = 1;
+		QRDataEncoder.version = 32;
+		this.assert('32-M error blocks', QRDataEncoder.numDataBlocks(), [[10,46],[23,47]]);
+	},
+	
+	NumCodewords: function() {
+		for (var version = 1; version <= 40; ++version)
+		{
+			var sum = QRDataEncoder.numDataCodewords(version, 0) + QRDataEncoder.numErrorCodewords(version, 0) * QRDataEncoder.numErrorBlocks(version, 0);
+			for (var ECLevel = 1; ECLevel <= 3; ++ECLevel)
+			{
+				var sumCheck = QRDataEncoder.numDataCodewords(version, ECLevel) + QRDataEncoder.numErrorCodewords(version, ECLevel) * QRDataEncoder.numErrorBlocks(version, ECLevel);
+				this.assert('Total Codewords version '+version+' EC '+ECLevel, sum, sumCheck);
+			}
+		
+		}
 		QRDataEncoder.ECLevel = 2;
 		QRDataEncoder.version = 9;
 		this.assert('9-Q error blocks', QRDataEncoder.numDataBlocks(), [[4,16],[4,17]]);
@@ -2004,6 +2042,7 @@ var QRUnitTests =
 		QRUnitTests.DataBits();
 		QRUnitTests.ErrorCorrection();
 		QRUnitTests.ErrorCorrectionBlocks();
+		QRUnitTests.NumCodewords();
 		QRUnitTests.MinimumVersionRequired();
 		//QRUnitTests.MaxCharactersAllowed
 	}
@@ -2016,12 +2055,13 @@ QRCreator.setupCanvas(document.getElementById("QR"));
 
 // STEP 1: set up the text and specify text mode/encoding
 QRCreator.addText("HELLO WORLD", QRDataEncoder.TEXTMODE_ALNUM);
+QRCreator.addText("123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789", QRDataEncoder.TEXTMODE_ALNUM);
 // STEP 2: Make it visible!
 //   displayQR has 3 parameters, the latter two are optional.
 //     -EClevel       - error correction level
 //     -version [opt] - Version (size). if unspecified or 0, the QR generator will choose the minimum version required for the given text
 //     -mask    [opt] - QR mask. if unspecified, the QR generator will choose a suitable mask
-QRCreator.displayQR(0);
+QRCreator.displayQR(0, 7, 0);
 
 // Optional steps:
 // One can use QRCreator.reset() and go back to step 1 to create other QR codes.
