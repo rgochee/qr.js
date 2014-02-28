@@ -1102,7 +1102,7 @@ var QRDataEncoder = {
 		{
 			for (var j = 0; j < this.numErrorBlocks(); ++j)
 			{
-				if (this.dataCodewords[j][i])
+				if (typeof(this.dataCodewords[j][i]) != 'undefined')
 				{
 					this.dataCodewordsInt.push(this.dataCodewords[j][i]);
 				}
@@ -1788,7 +1788,6 @@ var QRCreator = {
 			return;
 		}
 		
-		this.colorModule(9,15);
 		var ver = this.version.getData();
 		var width = this.getWidth();
 		for (var i = 0; i < 6; i++) {
@@ -1805,6 +1804,9 @@ var QRCreator = {
 		this.addDataBlocks(this.myQRDataEncoder.dataCodewordsInt);
 		this.addDataBlocks(this.myQRDataEncoder.errorCodewordsInt);
 		this.fillRemainder();
+		
+		alert(this.myQRDataEncoder.dataCodewordsInt.length);
+		alert(this.myQRDataEncoder.errorCodewordsInt.length);
 	},
 	
 	displayQR: function(ECLevel, version, mask) {
