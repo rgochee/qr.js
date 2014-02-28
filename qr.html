@@ -1954,6 +1954,7 @@ var QRUnitTests =
 	EncodeNumText: function() {
 		this.currentFunction = 'EncodeNumText';
 		
+		QRDataEncoder.version = 3;
 		QRDataEncoder.text = "0123456789012345";
 		QRDataEncoder.textmode = QRDataEncoder.TEXTMODE_NUM;
 		QRDataEncoder.encode();
@@ -1963,6 +1964,7 @@ var QRUnitTests =
 	EncodeAlnumText: function() {
 		this.currentFunction = 'EncodeAlnumText';
 		
+		QRDataEncoder.version = 3;
 		QRDataEncoder.text = "AC-42";
 		QRDataEncoder.textmode = QRDataEncoder.TEXTMODE_ALNUM;
 		QRDataEncoder.encode();
@@ -2100,6 +2102,7 @@ var QRUnitTests =
 
 // STEP 0: set up your drawing area (needs to be done only once)
 QRCreator.setupCanvas(document.getElementById("QR"));
+//QRCreator.setupCanvas(document.getElementById("QR"), 3);
 
 // STEP 1: set up the text and specify text mode/encoding
 QRCreator.addText("HELLO WORLD", QRDataEncoder.TEXTMODE_ALNUM);
@@ -2109,7 +2112,8 @@ QRCreator.addText("1234567891234567891234567891234567891234567891234567891234567
 //     -EClevel       - error correction level
 //     -version [opt] - Version (size). if unspecified or 0, the QR generator will choose the minimum version required for the given text
 //     -mask    [opt] - QR mask. if unspecified, the QR generator will choose a suitable mask
-QRCreator.displayQR(3, 8);
+QRCreator.displayQR(0);
+//QRCreator.displayQR(3, 30);
 
 // Optional steps:
 // One can use QRCreator.reset() and go back to step 1 to create other QR codes.
