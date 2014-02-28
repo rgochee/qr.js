@@ -1544,26 +1544,29 @@ var QRCreator = {
 	},
 	
 	maskGrid: function(mask) {
-		this.format.mask = (typeof mask == 'undefined' ?  this.selectMask() : mask);
-		for (var i = 0; i < this.getWidth(); ++i) {
-			for (var j = 0; j < this.getWidth(); ++j) {
-				this.grid[j+4][i+4] ^= this.format.shouldMask(i,j);
-			}
+		if (typeof mask == 'undefined') {
+			this.selectMask();
 		}
+		else
+		{
+			this.format.mask = mask;
+			for (var i = 0; i < this.getWidth(); ++i) {
+				for (var j = 0; j < this.getWidth(); ++j) {
+					this.grid[j+4][i+4] ^= this.format.shouldMask(i,j);
+				}
+			}
 		
-		// reinit the structure because it shouldn't be masked.
-		this.initStructure();
+			// reinit the structure because it shouldn't be masked.
+			this.initStructure();
+		}
 	},
 	
 	selectMask: function() {
 		var minScore = 100000;
 		var bestMask = -1;
+			
 		for (var i = 0; i < 8; ++i)
 		{
-			// we need to reset the grid each time we do the mask
-			this.initGrid(this.version.number);
-			this.createAndFillBlocks();
-			
 			// now mask and score
 			this.maskGrid(i);
 			var score = this.scoreQR();
@@ -1572,11 +1575,13 @@ var QRCreator = {
 				minScore = score;
 				bestMask = i;
 			}
+			
+			// now unmask
+			this.maskGrid(i);
 		}
 		
-		// since we messed with the grid, we gotta reset one last time TODO: this is hacky
-		this.initGrid(this.version.number);
-		this.createAndFillBlocks();
+		// best mask is complete!
+		this.maskGrid(bestMask);
 			
 		return bestMask;
 	},
@@ -1804,9 +1809,6 @@ var QRCreator = {
 		this.addDataBlocks(this.myQRDataEncoder.dataCodewordsInt);
 		this.addDataBlocks(this.myQRDataEncoder.errorCodewordsInt);
 		this.fillRemainder();
-		
-		alert(this.myQRDataEncoder.dataCodewordsInt.length);
-		alert(this.myQRDataEncoder.errorCodewordsInt.length);
 	},
 	
 	displayQR: function(ECLevel, version, mask) {
@@ -2107,7 +2109,7 @@ QRCreator.addText("1234567891234567891234567891234567891234567891234567891234567
 //     -EClevel       - error correction level
 //     -version [opt] - Version (size). if unspecified or 0, the QR generator will choose the minimum version required for the given text
 //     -mask    [opt] - QR mask. if unspecified, the QR generator will choose a suitable mask
-QRCreator.displayQR(0, 7, 0);
+QRCreator.displayQR(3, 8);
 
 // Optional steps:
 // One can use QRCreator.reset() and go back to step 1 to create other QR codes.
