@@ -2,8 +2,8 @@ define(function (require) {
 	var utils = require('../lib/externalUtils');
 	var BinMath = require('../math/binmath');
 	var GF256 = require('../math/GF256/GF256');
-	var GF256Value = require('../math/GF256/GF256Value');
 	var GF256Poly = require('../math/GF256/GF256Poly');
+	var MatrixBarcode = require('./MatrixBarcode');
 
 	// singleton that acts as our data encoder
 	// TODO: should this really be a singleton?
@@ -731,12 +731,6 @@ define(function (require) {
 
 	var QRCreator = {
 		// local vars
-		canvas: null,
-		size: 6, // default size
-		
-		textData: null,
-		
-		grid: null,
 		blockPos: null,
 		blockDir: null,
 
@@ -812,9 +806,7 @@ define(function (require) {
 			this.addText('', 0);
 			this.setVersion(1);
 			this.setECLevel(0);
-			this.resetCanvas();
-			this.textData = null;
-			this.grid = null;
+			MatrixBarcode.resetCanvas();
 			this.blockPos = null;
 			this.blockDir = null;
 		},
@@ -826,66 +818,36 @@ define(function (require) {
 		getWidth: function() {
 			return 17+4*this.version.number;
 		},
+		getX: function(x) {
+			if (x < 0 || x > this.getWidth()) {
+				return null;
+			}
+			return x+4;
+		},
+		getY: function(y) {
+			return this.getX(y);
+		},
 		
 		//
 		// drawing functions
 		//
-		
-		// Colors in a module in the grid
-		colorModule: function(x,y) {
-			//this.canvas.getContext("2d").fillRect((x+4)*this.size, (y+4)*this.size, this.size, this.size);
-			this.grid[x+4][y+4] = 1;
+		getModule: function(x, y) {
+			return MatrixBarcode.getModule(this.getX(x), this.getY(y));
 		},
-		// Erases a module from the grid
-		eraseModule: function(x,y) {
-			//this.canvas.getContext("2d").clearRect((x+4)*this.size, (y+4)*this.size, this.size, this.size);
-			this.grid[x+4][y+4] = 0;
+		drawModule: function(x, y, fill) {
+			MatrixBarcode.drawModule(this.getX(x), this.getY(y), fill);
 		},
-		// Colors or erases a module in the grid according to fill (1/0)
-		drawModule: function(x,y, fill) {
-			if (fill) {
-				this.colorModule(x,y);
-			} else {
-				this.eraseModule(x,y);
-			}
-		},
-		// Colors or erases a square with specified size in the grid with top left corner at (x,y)
 		drawSquare: function(x, y, size, fill) {
-			for (var i = 0; i < size; ++i) {
-				for (var j = 0; j < size; ++j) {
-					if (fill) {
-						this.colorModule(x+i, y+j);
-					} else {
-						this.eraseModule(x+i, y+j);
-					}
-				}
-			}
+			MatrixBarcode.drawSquare(this.getX(x), this.getY(y), size, fill);
 		},
-		// draws a line of alternating modules with specified length starting at (x,y) and moving in the specified direction
-		//   dir: 'r': right (or 'h': horizontal) and 'd': down (or 'v': vertical)
 		drawAlternating: function(x, y, dir, len) {
-			for (var i = 0; i < len; ++i) {	
-				if (dir == "r" || dir == "h") {
-					if (i % 2 == 0) {
-						this.colorModule(x+i, y);
-					} else {
-						this.eraseModule(x+i, y);
-					}
-				}
-				else if (dir == "d" || dir == "v") {
-					if (i % 2 == 0) {
-						this.colorModule(x, y+i);
-					} else {
-						this.eraseModule(x, y+i);
-					}
-				}
-			}
+			MatrixBarcode.drawAlternating(this.getX(x), this.getY(y), dir, len);
 		},
 		
 		// adding data
 		
 		addBlock: function(block) {
-			if (this.blockPos[0] < 0) {
+			if (this.blockPos.X < 0) {
 				return;
 			}
 			for (var i = 7; i >= 0; --i) {
@@ -893,11 +855,11 @@ define(function (require) {
 				// try to put it in
 				// NOTE: this is somewhat of a hack
 				// it works by requiring that we init the structural parts of the QR code so we can assume anything null is where data goes
-				if (this.grid[this.blockPos[0]+1+4][this.blockPos[1]+4] == null) {
-					this.grid[this.blockPos[0]+1+4][this.blockPos[1]+4] = value;
+				if (this.getModule(this.blockPos.X+1, this.blockPos.Y) == null) {
+					this.drawModule(this.blockPos.X+1, this.blockPos.Y, value);
 					continue;
-				} else if (this.grid[this.blockPos[0]+4][this.blockPos[1]+4] == null) {
-					this.grid[this.blockPos[0]+4][this.blockPos[1]+4] = value;
+				} else if (this.getModule(this.blockPos.X, this.blockPos.Y) == null) {
+					this.drawModule(this.blockPos.X, this.blockPos.Y, value);
 					continue;
 				}
 				
@@ -917,28 +879,28 @@ define(function (require) {
 		// helper function for the above ensure proper placement of data blocks
 		incrementBlockPos: function() {
 			function moveBlockPosLeft(parent) {
-				parent.blockPos[0]-=2;
+				parent.blockPos.X-=2;
 				parent.blockDir ^= 1;
-				if (parent.blockPos[0] == 5) {
+				if (parent.blockPos.X == 5) {
 					// not right! get past the timing here
-					parent.blockPos[0]--;
+					parent.blockPos.X--;
 				}
 			}
 			if (this.blockDir == 0) {
 				// moving up!
-				if (this.blockPos[1] == 0) {
+				if (this.blockPos.Y == 0) {
 					// don't go too far up, let's move left and change directions
 					moveBlockPosLeft(this);
 				} else {
-					this.blockPos[1]--;
+					this.blockPos.Y--;
 				}
 				} else {
 				// moving down!
-				if (this.blockPos[1] == this.getWidth()-1) {
+				if (this.blockPos.Y == this.getWidth()-1) {
 					// don't go too far down, let's move left and change directions
 					moveBlockPosLeft(this);
 				} else {
-					this.blockPos[1]++;
+					this.blockPos.Y++;
 				}
 			}
 		},
@@ -946,15 +908,15 @@ define(function (require) {
 		// formatting/encoding/structure
 		
 		drawPosition: function(x,y) {
-			this.drawSquare(x-1,y-1,9,false);
-			this.drawSquare(x  ,y  ,7,true);
-			this.drawSquare(x+1,y+1,5,false);
-			this.drawSquare(x+2,y+2,3,true);
+			MatrixBarcode.drawSquare(this.getX(x)-1, this.getY(y)-1, 9, false); // hack. or I could have getX not return NULL?
+			this.drawSquare(x  , y  , 7, true );
+			this.drawSquare(x+1, y+1, 5, false);
+			this.drawSquare(x+2, y+2, 3, true );
 		},
 		drawAlignment: function(x,y) {
-			this.drawSquare(x-2, y-2, 5, true);
+			this.drawSquare(x-2, y-2, 5, true );
 			this.drawSquare(x-1, y-1, 3, false);
-			this.colorModule(x , y);
+			this.drawModule( x  , y  ,    true );
 		},
 		
 		drawAlignments: function() {
@@ -1004,46 +966,18 @@ define(function (require) {
 		},
 		
 		clearQuietZone: function() {
-			for (var i = 0; i < this.getWidth()/4+1; ++i)
-			{
-				this.drawSquare(-4, 4*(i-1), 4, false);
-				this.drawSquare(this.getWidth(), 4*(i-1), 4, false);
-				this.drawSquare(4*(i-1), -4, 4, false);
-				this.drawSquare(4*(i-1), this.getWidth(), 4, false);
-			}
-			this.drawSquare(this.getWidth(), this.getWidth(), 4, false);
-		},
-		
-		// fills in the rest of the grid with 0s. This is necessary for version QR versions.
-		fillRemainder: function() {
-			for (var i = 0; i < this.grid.length; ++i) {
-				for (var j = 0; j < this.grid[i].length; ++j) {
-					if (this.grid[i][j] == null) {
-						this.canvas.getContext("2d").clearRect(i*this.size, j*this.size, this.size, this.size);
-					}
-				}
-			}
+			MatrixBarcode.drawRect(0, 0, 4, this.getWidth()+8, false);
+			MatrixBarcode.drawRect(this.getWidth()+4, 0, 4, this.getWidth()+8, false);
+			MatrixBarcode.drawRect(4, 0, this.getWidth(), 4, false);
+			MatrixBarcode.drawRect(4, this.getWidth()+4, this.getWidth(), 4, false);
 		},
 		
 		// main functions
 		setupCanvas: function(canvas, size) {
-			this.canvas = canvas;
-			
-			if (size)
-			{
-				this.size = size;
-			}
-			this.resetCanvas();
+			MatrixBarcode.setupCanvas(canvas, size);
 		},
-		resetCanvas: function() {
-			var ctx = this.canvas.getContext("2d");
-			
-			// let's gray it out to start, so we see what's not done yet
-			ctx.fillStyle="#999999";
-			ctx.fillRect(0,0,300,300); // arbitrary size
-			
-			// draw the rest in black
-			ctx.fillStyle="#000000";
+		reset: function() {
+			MatrixBarcode.resetGrid();
 		},
 
 		initGrid: function(version) {
@@ -1060,11 +994,10 @@ define(function (require) {
 			
 			this.setVersion(version);
 			
-			this.grid = Array(this.getWidth()+8);
-			for (var i = 0; i < this.grid.length; ++i) {
-				this.grid[i] = Array(this.getWidth()+8);
-			}
-			this.blockPos = [this.getWidth()-2, this.getWidth()-1];
+			MatrixBarcode.initGrid(this.getWidth()+8);
+			
+			this.blockPos = {X:this.getWidth()-2,
+			                 Y:this.getWidth()-1};
 			this.blockDir = 0;
 			
 			this.initStructure();
@@ -1076,19 +1009,6 @@ define(function (require) {
 			this.drawFormat();
 		},
 		
-		displayGrid: function() {
-			var ctx = this.canvas.getContext("2d");
-			for (var i = 0; i < this.grid.length; ++i) {
-				for (var j = 0; j < this.grid[i].length; ++j) {
-					if (this.grid[i][j]) {
-						ctx.fillRect(i*this.size, j*this.size, this.size, this.size);
-					} else if (this.grid[i][j] == 0) {
-						ctx.clearRect(i*this.size, j*this.size, this.size, this.size);
-					}
-				}
-			}
-		},
-		
 		maskGrid: function(mask) {
 			if (typeof mask == 'undefined') {
 				this.selectMask();
@@ -1098,7 +1018,10 @@ define(function (require) {
 				this.format.mask = mask;
 				for (var i = 0; i < this.getWidth(); ++i) {
 					for (var j = 0; j < this.getWidth(); ++j) {
-						this.grid[j+4][i+4] ^= this.format.shouldMask(i,j);
+						if (this.format.shouldMask(i,j))
+						{
+							MatrixBarcode.invertModule(j+4, i+4);
+						}
 					}
 				}
 			
@@ -1139,11 +1062,11 @@ define(function (require) {
 			//horizontal
 			for (var i = 0; i < this.getWidth(); ++i) {
 				for (var j = 0; j < this.getWidth(); ++j) {
-					var color = this.grid[i+4][j+4];
+					var color = this.getModule(i,j);
 					var k;
 					for (k = 1; k < this.getWidth() - j; ++k)
 					{
-						if (this.grid[i+4][j+4+k] != color)
+						if (this.getModule(i,j+k) != color)
 						{
 							break;
 						}
@@ -1158,11 +1081,11 @@ define(function (require) {
 			//vertical
 			for (var i = 0; i < this.getWidth(); ++i) {
 				for (var j = 0; j < this.getWidth(); ++j) {
-					var color = this.grid[i+4][j+4];
+					var color = this.getModule(i,j);
 					var k;
-					for (k = 1; k < this.getWidth() - j; ++k)
+					for (k = 1; k < this.getWidth() - i; ++k)
 					{
-						if (this.grid[j+4+k][i+4] != color)
+						if (this.getModule(i+k,j) != color)
 						{
 							break;
 						}
@@ -1179,10 +1102,10 @@ define(function (require) {
 			var score2 = 0;
 			for (var i = 0; i < this.getWidth()-1; ++i) {
 				for (var j = 0; j < this.getWidth()-1; ++j) {
-					var color = this.grid[i+4][j+4];
-					if (this.grid[i+4+1][j+4  ] != color ||
-						this.grid[i+4  ][j+4+1] != color ||
-						this.grid[i+4+1][j+4+1] != color )
+					var color = this.getModule(i,j);
+					if (this.getModule(i+1,j  ) != color ||
+						this.getModule(i  ,j+1) != color ||
+						this.getModule(i+1,j+1) != color )
 					{
 						continue;
 					}
@@ -1194,59 +1117,59 @@ define(function (require) {
 			var score3 = 0;
 			for (var i = 0; i < this.getWidth()-10; ++i) {
 				for (var j = 0; j < this.getWidth()-10; ++j) {
-					if (this.grid[i+4][j+4   ] == 0 &&
-						this.grid[i+4][j+4+1 ] == 0 &&
-						this.grid[i+4][j+4+2 ] == 0 &&
-						this.grid[i+4][j+4+3 ] == 0 &&
-						this.grid[i+4][j+4+4 ] == 1 &&
-						this.grid[i+4][j+4+5 ] == 0 &&
-						this.grid[i+4][j+4+6 ] == 1 &&
-						this.grid[i+4][j+4+7 ] == 1 &&
-						this.grid[i+4][j+4+8 ] == 1 &&
-						this.grid[i+4][j+4+9 ] == 0 &&
-						this.grid[i+4][j+4+10] == 1 )
+					if (this.getModule(i,j   ) == 0 &&
+						this.getModule(i,j+1 ) == 0 &&
+						this.getModule(i,j+2 ) == 0 &&
+						this.getModule(i,j+3 ) == 0 &&
+						this.getModule(i,j+4 ) == 1 &&
+						this.getModule(i,j+5 ) == 0 &&
+						this.getModule(i,j+6 ) == 1 &&
+						this.getModule(i,j+7 ) == 1 &&
+						this.getModule(i,j+8 ) == 1 &&
+						this.getModule(i,j+9 ) == 0 &&
+						this.getModule(i,j+10) == 1 )
 					{
 						score3 += 40;
 					}
-					if (this.grid[i+4][j+4   ] == 1 &&
-						this.grid[i+4][j+4+1 ] == 0 &&
-						this.grid[i+4][j+4+2 ] == 1 &&
-						this.grid[i+4][j+4+3 ] == 1 &&
-						this.grid[i+4][j+4+4 ] == 1 &&
-						this.grid[i+4][j+4+5 ] == 0 &&
-						this.grid[i+4][j+4+6 ] == 1 &&
-						this.grid[i+4][j+4+7 ] == 0 &&
-						this.grid[i+4][j+4+8 ] == 0 &&
-						this.grid[i+4][j+4+9 ] == 0 &&
-						this.grid[i+4][j+4+10] == 0 )
+					if (this.getModule(i,j   ) == 1 &&
+						this.getModule(i,j+1 ) == 0 &&
+						this.getModule(i,j+2 ) == 1 &&
+						this.getModule(i,j+3 ) == 1 &&
+						this.getModule(i,j+4 ) == 1 &&
+						this.getModule(i,j+5 ) == 0 &&
+						this.getModule(i,j+6 ) == 1 &&
+						this.getModule(i,j+7 ) == 0 &&
+						this.getModule(i,j+8 ) == 0 &&
+						this.getModule(i,j+9 ) == 0 &&
+						this.getModule(i,j+10) == 0 )
 					{
 						score3 += 40;
 					}
-					if (this.grid[i+4   ][j+4] == 0 &&
-						this.grid[i+4+1 ][j+4] == 0 &&
-						this.grid[i+4+2 ][j+4] == 0 &&
-						this.grid[i+4+3 ][j+4] == 0 &&
-						this.grid[i+4+4 ][j+4] == 1 &&
-						this.grid[i+4+5 ][j+4] == 0 &&
-						this.grid[i+4+6 ][j+4] == 1 &&
-						this.grid[i+4+7 ][j+4] == 1 &&
-						this.grid[i+4+8 ][j+4] == 1 &&
-						this.grid[i+4+9 ][j+4] == 0 &&
-						this.grid[i+4+10][j+4] == 1 )
+					if (this.getModule(i  ,j) == 0 &&
+						this.getModule(i+1,j) == 0 &&
+						this.getModule(i+2,j) == 0 &&
+						this.getModule(i+3,j) == 0 &&
+						this.getModule(i+4,j) == 1 &&
+						this.getModule(i+5,j) == 0 &&
+						this.getModule(i+6,j) == 1 &&
+						this.getModule(i+7,j) == 1 &&
+						this.getModule(i+8,j) == 1 &&
+						this.getModule(i+9,j) == 0 &&
+						this.getModule(i+1,j) == 1 )
 					{
 						score3 += 40;
 					}
-					if (this.grid[i+4   ][j+4] == 1 &&
-						this.grid[i+4+1 ][j+4] == 0 &&
-						this.grid[i+4+2 ][j+4] == 1 &&
-						this.grid[i+4+3 ][j+4] == 1 &&
-						this.grid[i+4+4 ][j+4] == 1 &&
-						this.grid[i+4+5 ][j+4] == 0 &&
-						this.grid[i+4+6 ][j+4] == 1 &&
-						this.grid[i+4+7 ][j+4] == 0 &&
-						this.grid[i+4+8 ][j+4] == 0 &&
-						this.grid[i+4+9 ][j+4] == 0 &&
-						this.grid[i+4+10][j+4] == 0 )
+					if (this.getModule(i  ,j) == 1 &&
+						this.getModule(i+1,j) == 0 &&
+						this.getModule(i+2,j) == 1 &&
+						this.getModule(i+3,j) == 1 &&
+						this.getModule(i+4,j) == 1 &&
+						this.getModule(i+5,j) == 0 &&
+						this.getModule(i+6,j) == 1 &&
+						this.getModule(i+7,j) == 0 &&
+						this.getModule(i+8,j) == 0 &&
+						this.getModule(i+9,j) == 0 &&
+						this.getModule(i+1,j) == 0 )
 					{
 						score3 += 40;
 					}
@@ -1258,7 +1181,7 @@ define(function (require) {
 			var countBlack = 0;
 			for (var i = 0; i < this.getWidth()-1; ++i) {
 				for (var j = 0; j < this.getWidth()-1; ++j) {
-					if (this.grid[i+4][j+4] == 1)
+					if (this.getModule(i,j) == 1)
 					{
 						countBlack++;
 					}
@@ -1276,14 +1199,15 @@ define(function (require) {
 		},
 		
 		drawPatterns: function() {
+			var width = this.getWidth();
 			// position detection patterns
 			this.drawPosition(0,0);
-			this.drawPosition(this.getWidth()-7,0);
-			this.drawPosition(0,this.getWidth()-7);
+			this.drawPosition(width-7,0);
+			this.drawPosition(0,width-7);
 			
 			// timing patterns
-			this.drawAlternating(8,6,"r",this.getWidth()-16);
-			this.drawAlternating(6,8,"d",this.getWidth()-16);
+			this.drawAlternating(8,6,"r",width-16);
+			this.drawAlternating(6,8,"d",width-16);
 			
 			// alignment patterns
 			this.drawAlignments();
@@ -1330,7 +1254,7 @@ define(function (require) {
 			this.drawModule(8, width-2, format & 1<<13);
 			this.drawModule(8, width-1, format & 1<<14);
 			
-			this.colorModule(8, width-8);
+			this.drawModule(8, width-8, true);
 		},
 		
 		drawVersion: function() {
@@ -1354,7 +1278,7 @@ define(function (require) {
 			this.myQRDataEncoder.createErrorCodewords();
 			this.addDataBlocks(this.myQRDataEncoder.dataCodewordsInt);
 			this.addDataBlocks(this.myQRDataEncoder.errorCodewordsInt);
-			this.fillRemainder();
+			MatrixBarcode.fillRemainder();
 		},
 		
 		displayQR: function(ECLevel, version, mask) {
@@ -1371,7 +1295,7 @@ define(function (require) {
 			this.maskGrid(mask);
 
 			// display grid
-			this.displayGrid();
+			MatrixBarcode.displayGrid();
 		}
 	}
 	
