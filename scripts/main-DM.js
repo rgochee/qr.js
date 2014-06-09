@@ -18,8 +18,8 @@ require(['./barcodes/DataMatrix/DataMatrix'/*, './barcode/DataMatrix/DataMatrix_
 	//   displayBarcode has 3 parameters, the latter two are optional.
 	//     -width   [opt] - Width (size). if unspecified or 0, the DataMatrix generator will choose the minimum (square) size required for the given text
 	//     -height  [opt] - Height (size). if unspecified or 0, the DataMatrix generator will default to the width (i.e. square barcode)
-	DM.DataMatrixCreator.displayBarcode(10,10);
-	//DataMatrixCreator.displayQR(DM.DataMatrixEncoder.ECLEVEL_H, 30);
+	DM.DataMatrixCreator.displayBarcode();
+	//DM.DataMatrixCreator.displayBarcode(12,36);
 
 	// Optional steps:
 	// One can use DataMatrixCreator.reset() and go back to step 1 to create other DataMatrix codes.
