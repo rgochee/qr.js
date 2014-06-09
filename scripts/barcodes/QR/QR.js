@@ -1,12 +1,11 @@
 define(function (require) {
-	var utils = require('../lib/externalUtils');
-	var BinMath = require('../math/binmath');
-	var GF256 = require('../math/GF256/GF256');
-	var GF256Poly = require('../math/GF256/GF256Poly');
-	var MatrixBarcode = require('./MatrixBarcode');
+	var utils = require('../../lib/externalUtils');
+	var BinMath = require('../../math/binmath');
+	var GF256 = require('../../math/GF256/GF256');
+	var GF256Poly = require('../../math/GF256/GF256Poly');
+	var MatrixBarcode = require('../MatrixBarcode');
 
 	// singleton that acts as our data encoder
-	// TODO: should this really be a singleton?
 	var QRDataEncoder = {
 		// constants
 		TEXTMODE_NUM:    1,
@@ -18,6 +17,11 @@ define(function (require) {
 		TEXTMODE_FNC11:  5, // unsupported
 		TEXTMODE_FNC12:  9, // unsupported
 		TEXTMODE_EOM:    0,
+		
+		ECLEVEL_L: 0,
+		ECLEVEL_M: 1,
+		ECLEVEL_Q: 2,
+		ECLEVEL_H: 3,
 		
 		// local vars
 		text: "",
@@ -246,54 +250,6 @@ define(function (require) {
 								];
 			return dataECCodewords[version][ECLevel]
 		},
-		
-		/*
-		// Returns the number of required error blocks for the specified QR code version+level
-		numErrorBlocks2: function() {
-			var dataECBlocks = [[]
-								,[[ 1   ], [ 1   ], [ 1   ], [ 1   ]] //1
-								,[[ 1   ], [ 1   ], [ 1   ], [ 1   ]] //2
-								,[[ 1   ], [ 1   ], [ 2   ], [ 2   ]] //3
-								,[[ 1   ], [ 2   ], [ 2   ], [ 4   ]] //4
-								,[[ 1   ], [ 2   ], [ 2   ], [ 2   ]] //5
-								,[[ 2   ], [ 4   ], [ 4   ], [ 4   ]] //6
-								,[[ 2   ], [ 4   ], [ 2, 4], [ 4, 1]] //7
-								,[[ 2   ], [ 2, 2], [ 4, 2], [ 4, 2]] //8
-								,[[ 2   ], [ 3, 2], [ 4, 4], [ 4, 4]] //9
-								,[[ 2, 2], [ 4, 1], [ 6, 2], [ 6, 2]] //10
-								,[[ 4   ], [ 1, 4], [ 4, 4], [ 3, 8]] //11
-								,[[ 2, 2], [ 6, 2], [ 4, 6], [ 7, 4]] //12
-								,[[ 4   ], [ 8, 1], [ 8, 4], [12, 4]] //13
-								,[[ 3, 1], [ 4, 5], [11, 5], [11, 5]] //14
-								,[[ 5, 1], [ 5, 5], [ 5, 7], [11, 7]] //15
-								,[[ 5, 1], [ 7, 3], [15, 2], [ 3,13]] //16
-								,[[ 1, 5], [10, 1], [ 1,15], [ 2,17]] //17
-								,[[ 5, 1], [ 9, 4], [17, 1], [ 2,19]] //18
-								,[[ 3, 4], [ 3,11], [17, 4], [ 9,16]] //19
-								,[[ 3, 5], [ 3,13], [15, 5], [15,10]] //20
-								,[[ 4, 4], [17   ], [17, 6], [19, 6]] //21
-								,[[ 2, 7], [17   ], [ 7,16], [34   ]] //22
-								,[[ 4, 5], [ 4,14], [11,14], [16,14]] //23
-								,[[ 6, 4], [ 6,14], [11,16], [30, 2]] //24
-								,[[ 8, 4], [ 8,13], [ 7,22], [22,13]] //25
-								,[[10, 2], [19, 4], [28, 6], [33, 4]] //26
-								,[[ 8, 4], [22, 3], [ 8,26], [12,28]] //27
-								,[[ 3,10], [ 3,23], [ 4,31], [11,31]] //28
-								,[[ 7, 7], [21, 7], [ 1,37], [29,26]] //29
-								,[[ 5,10], [19,10], [15,25], [23,25]] //30
-								,[[13, 3], [ 2,29], [42, 1], [23,28]] //31
-								,[[17   ], [10,23], [10,35], [19,35]] //32
-								,[[17, 1], [14,21], [29,19], [11,46]] //33
-								,[[13, 6], [14,23], [44, 7], [59, 1]] //34
-								,[[12, 7], [12,26], [39,14], [22,41]] //35
-								,[[ 6,14], [ 6,34], [46,10], [ 2,64]] //36
-								,[[17, 4], [29,14], [24,10], [24,46]] //37
-								,[[ 4,18], [13,32], [48,14], [42,32]] //38
-								,[[20, 4], [40, 7], [43,22], [10,67]] //39
-								,[[19, 6], [18,31], [34,34], [20,61]] //40
-								];
-			return dataECCodewords[this.version][this.ECLevel]
-		},*/
 		
 		// Returns the number of required error correction blocks for the specified QR code version+level
 		numErrorBlocks: function(version, ECLevel) {
@@ -787,7 +743,11 @@ define(function (require) {
 		myQRDataEncoder: QRDataEncoder,
 		
 		// Modify data
-		addText: function(text, textmode) {
+		setText: function(text, textmode) {
+			if (!textmode)
+			{
+				textmode = this.myQRDataEncoder.TEXTMODE_BYTE;
+			}
 			this.myQRDataEncoder.text = text;
 			this.myQRDataEncoder.textmode = textmode;
 		},
@@ -840,8 +800,8 @@ define(function (require) {
 		drawSquare: function(x, y, size, fill) {
 			MatrixBarcode.drawSquare(this.getX(x), this.getY(y), size, fill);
 		},
-		drawAlternating: function(x, y, dir, len) {
-			MatrixBarcode.drawAlternating(this.getX(x), this.getY(y), dir, len);
+		drawAlternating: function(x, y, len, dir) {
+			MatrixBarcode.drawAlternating(this.getX(x), this.getY(y), len, dir);
 		},
 		
 		// adding data
@@ -925,6 +885,16 @@ define(function (require) {
 				return;
 			}
 			
+			// We add 1 new row/col of alignment patterns every 7 patterns
+			// The patterns are placed with as equal of spacing as possible
+			// with an irregular spacing only between the first and second 
+			// coordinates and the first and last coordinates are anchored 
+			// to 6 and width-7.
+			// Also, spacing must at an even number to match with timing
+			// Based on this, we can algorithmically generate this list if we want.
+			// This list describes the distance between each pattern from
+			// the second to the last. The distance to the first and second
+			// is whatever is left over
 			var differences = [0, 0, 0, 0, 0, 0, 0,        // 1-6
 							   16, 18, 20, 22, 24, 26, 28, // 7-13
 							   20, 22, 24, 24, 26, 28, 28, // 14-20
@@ -941,6 +911,7 @@ define(function (require) {
 			
 			for (var i = 0; i <= maxNum; ++i) {
 				for (var j = 0; j <= maxNum; ++j) {
+					// Skip coordinates that overlap with position patterns
 					if ((i == maxNum && j == maxNum) ||
 						(i == 0      && j == maxNum) ||
 						(i == maxNum && j == 0     ) )
@@ -1206,8 +1177,8 @@ define(function (require) {
 			this.drawPosition(0,width-7);
 			
 			// timing patterns
-			this.drawAlternating(8,6,"r",width-16);
-			this.drawAlternating(6,8,"d",width-16);
+			this.drawAlternating(8,6,width-16,'r');
+			this.drawAlternating(6,8,width-16,'d');
 			
 			// alignment patterns
 			this.drawAlignments();

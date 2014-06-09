@@ -1,6 +1,6 @@
 define(function (require) {
-	var GF256Value = require('../math/GF256/GF256Value');
-	var GF256Poly = require('../math/GF256/GF256Poly');
+	var GF256Value = require('../../math/GF256/GF256Value');
+	var GF256Poly = require('../../math/GF256/GF256Poly');
 	var QR = require('./qr');
 
 	var QRUnitTests = 

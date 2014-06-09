@@ -82,18 +82,30 @@ define(function (require) {
 		drawSquare: function(x, y, size, fill) {
 			this.drawRect(x, y, size, size, fill);
 		},
+		// draws a line of solid color with specified length starting at (x,y) and moving in the specified direction
+		//   dir: 'r': right (or 'h': horizontal) and 'd': down (or 'v': vertical)
+		drawLine: function(x, y, len, dir, fill) {
+			for (var i = 0; i < len; ++i) {	
+				if (dir == 'r' || dir == 'h') {
+					this.drawModule(x+i, y, fill);
+				}
+				else if (dir == 'd' || dir == 'v') {
+					this.drawModule(x, y+i, fill);
+				}
+			}
+		},
 		// draws a line of alternating modules with specified length starting at (x,y) and moving in the specified direction
 		//   dir: 'r': right (or 'h': horizontal) and 'd': down (or 'v': vertical)
-		drawAlternating: function(x, y, dir, len) {
+		drawAlternating: function(x, y, len, dir) {
 			for (var i = 0; i < len; ++i) {	
-				if (dir == "r" || dir == "h") {
+				if (dir == 'r' || dir == 'h') {
 					if (i % 2 == 0) {
 						this.colorModule(x+i, y);
 					} else {
 						this.eraseModule(x+i, y);
 					}
 				}
-				else if (dir == "d" || dir == "v") {
+				else if (dir == 'd' || dir == 'v') {
 					if (i % 2 == 0) {
 						this.colorModule(x, y+i);
 					} else {
