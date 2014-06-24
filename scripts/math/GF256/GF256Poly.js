@@ -14,6 +14,7 @@ define(function (require) {
 			this.set(value, term);
 		}
 	}
+	
 	// string representation of the polynomial with higher order terms first, e.g. "3x^2 + 2x + 1"
 	GF256Poly.prototype.toString = function() {
 		// no terms/uninitialized
@@ -77,6 +78,7 @@ define(function (require) {
 		}
 		return temp;
 	}
+	
 	// sets value of polynomial
 	// term is an optional parameter
 	// if term is not set, value is a list of coefficients as in [1, x, x^2, ...], overriding any original values
@@ -119,10 +121,12 @@ define(function (require) {
 		// when value is 0, we can have leading 0 terms in the function. clear those out
 		this.clearLeadingTerms();
 	}
+	
 	// returns the leading coefficient
 	GF256Poly.prototype.getMaxTerm = function() {
 		return this.poly.length-1;
 	}
+	
 	// returns the coefficient of the term whose exponent is [term]
 	GF256Poly.prototype.getCoeff = function(term) {
 		if (term < this.poly.length)
@@ -131,6 +135,7 @@ define(function (require) {
 		}
 		return 0;
 	}
+	
 	// clears out leading terms that are 0, e.g. 0x^2 + 1 -> 1
 	GF256Poly.prototype.clearLeadingTerms = function() {
 		for (i = this.poly.length-1; i > 0; --i)
@@ -142,6 +147,7 @@ define(function (require) {
 			}
 		}
 	}
+	
 	// adds value of other polynomial to this, returning new result
 	GF256Poly.prototype.add = function(other) {
 		var i;
@@ -161,24 +167,49 @@ define(function (require) {
 		
 		return this;
 	}
+	
 	// multiplies value of other polynomial to this, returning new result
 	GF256Poly.prototype.multiply = function(other) {
 		var temp = this.poly;
 		this.poly = [];
+		
 		for (var i = 0; i < temp.length; ++i)
 		{
+			// bail out early if possible
+			if (temp[i].getInteger() == 0)
+			{
+				continue;
+			}
+			
 			for (var j = 0; j < other.poly.length; ++j)
 			{
+				// bail out early if possible
+				if (other.poly[j].getInteger == 0)
+				{
+					continue;
+				}
+				
 				if (!this.poly[i+j])
 				{
 					this.poly[i+j] = new GF256Value();
 				}
+				
 				this.poly[i+j].add(GF256Value.multiply(temp[i], other.poly[j]));
+			}
+		}
+		
+		// if we bailed out early, we may have to clean up our polynomial
+		for (var i = 0; i < this.poly.length; ++i)
+		{
+			if (!this.poly[i])
+			{
+				this.poly[i] = new GF256Value();
 			}
 		}
 		
 		return this;
 	}
+	
 	// sets value to this%other, returning new result
 	GF256Poly.prototype.modulo = function(other) {
 		// while polynomial is bigger than modulus
