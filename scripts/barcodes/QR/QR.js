@@ -1,9 +1,10 @@
 define(function (require) {
 	var utils = require('../../lib/externalUtils');
 	var BinMath = require('../../math/binmath');
-	//var GF256 = require('../../math/GF256/GF256');
 	var GF256Poly = require('../../math/GF256/GF256Poly');
 	var MatrixBarcode = require('../MatrixBarcode');
+	
+	GF256Poly.init(285);
 
 	// singleton that acts as our data encoder
 	var QRDataEncoder = {
@@ -1269,8 +1270,6 @@ define(function (require) {
 			MatrixBarcode.displayGrid();
 		}
 	}
-	
-	GF256Poly.init(285);
 	
 	return { QRCreator: QRCreator, QRDataEncoder: QRDataEncoder };
 });

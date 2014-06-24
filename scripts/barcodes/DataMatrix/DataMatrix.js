@@ -1,9 +1,10 @@
 define(function (require) {
 	var utils = require('../../lib/externalUtils');
 	var BinMath = require('../../math/binmath');
-	var GF256 = require('../../math/GF256/GF256');
 	var GF256Poly = require('../../math/GF256/GF256Poly');
 	var MatrixBarcode = require('../MatrixBarcode');
+	
+	GF256Poly.init(301);
 
 	// singleton that acts as our data encoder
 	var DataMatrixEncoder = {
@@ -748,7 +749,6 @@ define(function (require) {
 		// formatting/encoding/structure
 		drawAlignmentBox: function(x, y, width, height) {
 			this.drawLine(x, y, height-1, 'd', true);
-			console.log(y+height-1);
 			this.drawLine(x, y+height-1, width, 'r', true);
 			this.drawAlternating(x, y, width, 'r');
 			this.drawAlternating(x+width-1, y+1, height-2, 'd');
@@ -762,7 +762,6 @@ define(function (require) {
 			var blockSize = this.size.getDataRegionInfo();
 			var blockRows = Math.floor(this.getHeight()/blockSize.h);
 			var blockCols = Math.floor(this.getWidth()/blockSize.w);
-			console.log(blockSize);
 			for (var i = 0; i < blockRows; ++i) {
 				for (var j = 0; j < blockCols; ++j) {
 					this.drawAlignmentBox(blockSize.w*j, blockSize.h*i, blockSize.w, blockSize.h);
