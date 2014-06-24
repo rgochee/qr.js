@@ -3,9 +3,6 @@ define(function (require) {
 	// singleton variable that stores log/exp tables for GF256
 	var GF256 = {};
 	(function() {
-		// constants
-		var _MODULO = 285;
-		
 		// given alpha^exp = integer
 		var _logTable = [];	// logTable[val] = exp
 		var _expTable = [];	// expTable[exp] = vap
@@ -33,7 +30,7 @@ define(function (require) {
 		};
 		
 		// Now set up and call function to initialize the log/exp tables
-		this._init = function() {
+		this.init = function(modulo) {
 			var exp = 0;
 			var val = 1;
 			for (var exp = 0; exp < 256; ++exp)
@@ -44,12 +41,11 @@ define(function (require) {
 				val *= 2;
 				if (val >= 256)
 				{
-					val ^= _MODULO;
+					val ^= modulo;
 				}
 			}
 			_logTable[1] = 0;
 		};
-		this._init();
 	}).call(GF256);
 
 	return GF256;

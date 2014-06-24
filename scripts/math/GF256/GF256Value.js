@@ -17,6 +17,12 @@ define(function(require) {
 			this.setInteger(val);
 		}
 	}
+	
+	// This function must be called before anything else! Give a proper modulo to set up the Galois field
+	GF256Value.init = function(modulo) {
+		GF256.init(modulo);
+	}
+	
 	// returns a string representation of the value. not the generator^exp
 	GF256Value.prototype.toString = function() {
 		return ''+this.val;

@@ -7,12 +7,17 @@ define(function (require) {
 	// if term is not set, value is a list of coefficients as in [1, x, x^2, ...]
 	// if term is set, then it sets the coefficient of x^term to the value
 	// value can be a GF256Value or an integer (automatically converted to a GF256Value)
-	function GF256Poly(value, term) {
+	function GF256Poly(value, term, isExp) {
 		this.poly = [new GF256Value(0)];
 		if (typeof(value) != 'undefined')
 		{
-			this.set(value, term);
+			this.set(value, term, isExp);
 		}
+	}
+	
+	// This function must be called before anything else! Give a proper modulo to set up the Galois field
+	GF256Poly.init = function(modulo) {
+		GF256Value.init(modulo);
 	}
 	
 	// string representation of the polynomial with higher order terms first, e.g. "3x^2 + 2x + 1"
@@ -84,7 +89,7 @@ define(function (require) {
 	// if term is not set, value is a list of coefficients as in [1, x, x^2, ...], overriding any original values
 	// if term is set, then it sets the coefficient of x^term to the value
 	// value can be a GF256Value or an integer (automatically converted to a GF256Value)
-	GF256Poly.prototype.set = function(value, term) {
+	GF256Poly.prototype.set = function(value, term, isExp) {
 		if (typeof(term) == 'undefined')
 		{
 			this.poly = [];
@@ -96,7 +101,7 @@ define(function (require) {
 				}
 				else
 				{
-					this.poly[i] = new GF256Value(value[i]);
+					this.poly[i] = new GF256Value(value[i], isExp);
 				}
 			}
 		}
@@ -108,7 +113,7 @@ define(function (require) {
 			}
 			else
 			{
-				this.poly[term] = new GF256Value(value);
+				this.poly[term] = new GF256Value(value, isExp);
 			}
 			for (var i = term-1; i >= 0; --i)
 			{

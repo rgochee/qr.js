@@ -1,7 +1,7 @@
 define(function (require) {
 	var utils = require('../../lib/externalUtils');
 	var BinMath = require('../../math/binmath');
-	var GF256 = require('../../math/GF256/GF256');
+	//var GF256 = require('../../math/GF256/GF256');
 	var GF256Poly = require('../../math/GF256/GF256Poly');
 	var MatrixBarcode = require('../MatrixBarcode');
 
@@ -623,7 +623,7 @@ define(function (require) {
 			this.ECGenerator = new GF256Poly([1, 1])
 			for (var i = 1; i < this.numErrorCodewords(); ++i)
 			{
-				this.ECGenerator.multiply(new GF256Poly([GF256.exp(i), 1]));
+						this.ECGenerator.multiply(new GF256Poly([i, 0], undefined, true));
 			}
 		},
 		
@@ -1269,6 +1269,8 @@ define(function (require) {
 			MatrixBarcode.displayGrid();
 		}
 	}
+	
+	GF256Poly.init(285);
 	
 	return { QRCreator: QRCreator, QRDataEncoder: QRDataEncoder };
 });
